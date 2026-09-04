@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-// Έλεγχος αν είσαι logged in: κάνουμε ένα προσποιητό GET στο /api/admin/list
-// (αν πάρουμε 401, δείχνουμε login form)
 async function checkAuth() {
   try {
     const res = await fetch("/api/admin/list?status=pending", {
@@ -19,7 +17,6 @@ async function checkAuth() {
 
 export default function AdminPage() {
   const [authState, setAuthState] = useState("checking");
-  // authState: "checking" | "unauthed" | "authed"
 
   useEffect(() => {
     checkAuth().then((ok) => setAuthState(ok ? "authed" : "unauthed"));
@@ -39,9 +36,6 @@ export default function AdminPage() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   LOADING
-   ───────────────────────────────────────────────────────── */
 function LoadingScreen() {
   return (
     <div className="relative z-10 min-h-screen flex items-center justify-center">
@@ -50,9 +44,6 @@ function LoadingScreen() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   LOGIN
-   ───────────────────────────────────────────────────────── */
 function LoginScreen({ onSuccess }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -168,19 +159,17 @@ function LoginScreen({ onSuccess }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   ADMIN DASHBOARD
-   ───────────────────────────────────────────────────────── */
 function AdminDashboard({ onLogout }) {
   const router = useRouter();
-  const [tab, setTab] = useState("pending"); // "pending" | "ready"
+  const [tab, setTab] = useState("pending");
   const [requests, setRequests] = useState([]);
   const [counts, setCounts] = useState({ pending: 0, ready: 0 });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [approveTarget, setApproveTarget] = useState(null); // request object
-  const [deleteTarget, setDeleteTarget] = useState(null); // request object
+  const [approveTarget, setApproveTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -265,6 +254,31 @@ function AdminDashboard({ onLogout }) {
     }
   }
 
+  async function handleCleanupConfirm() {
+    try {
+      const res = await fetch("/api/admin/cleanup", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Σφάλμα κατά τον καθαρισμό.");
+        return;
+      }
+      setCleanupOpen(false);
+      alert(
+        data.deleted === 0
+          ? "Δεν βρέθηκαν αιτήσεις παλαιότερες των 30 ημερών."
+          : `Διαγράφηκαν ${data.deleted} αιτήσ${
+              data.deleted === 1 ? "η" : "εις"
+            } παλαιότερες των 30 ημερών.`
+      );
+      await loadRequests();
+    } catch {
+      alert("Σφάλμα δικτύου.");
+    }
+  }
+
   return (
     <>
       <main className="relative z-10 min-h-screen flex flex-col">
@@ -289,7 +303,7 @@ function AdminDashboard({ onLogout }) {
             </div>
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={loadRequests}
@@ -297,6 +311,14 @@ function AdminDashboard({ onLogout }) {
               className="px-3 py-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-200 text-sm transition-colors"
             >
               ↻ Ανανέωση
+            </button>
+            <button
+              type="button"
+              onClick={() => setCleanupOpen(true)}
+              title="Διαγραφή αιτήσεων παλαιότερων των 30 ημερών"
+              className="px-3 py-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-200 text-sm transition-colors"
+            >
+              🗓 Καθαρισμός
             </button>
             <button
               type="button"
@@ -309,7 +331,6 @@ function AdminDashboard({ onLogout }) {
         </header>
 
         <div className="px-4 md:px-6 pb-12 max-w-4xl mx-auto w-full">
-          {/* Tabs */}
           <div className="flex gap-2 mb-6 border-b border-slate-700/50">
             <TabButton
               active={tab === "pending"}
@@ -325,7 +346,6 @@ function AdminDashboard({ onLogout }) {
             </TabButton>
           </div>
 
-          {/* Content */}
           {loading ? (
             <div className="text-center text-slate-400 py-12">Φόρτωση...</div>
           ) : errorMsg ? (
@@ -353,7 +373,8 @@ function AdminDashboard({ onLogout }) {
         </div>
 
         <footer className="px-6 py-4 text-center text-xs text-slate-500">
-          SMAct Admin · {counts.pending + counts.ready} συνολικές αιτήσεις
+          SMAct Admin · {counts.pending + counts.ready} συνολικές αιτήσεις ·
+          Αυτόματη διαγραφή μετά από 30 μέρες
         </footer>
       </main>
 
@@ -370,6 +391,13 @@ function AdminDashboard({ onLogout }) {
           request={deleteTarget}
           onClose={() => setDeleteTarget(null)}
           onConfirm={handleDeleteConfirm}
+        />
+      )}
+
+      {cleanupOpen && (
+        <CleanupModal
+          onClose={() => setCleanupOpen(false)}
+          onConfirm={handleCleanupConfirm}
         />
       )}
     </>
@@ -392,9 +420,6 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   REQUEST CARD
-   ───────────────────────────────────────────────────────── */
 function RequestCard({ request, onApprove, onDelete }) {
   const [copied, setCopied] = useState(false);
 
@@ -419,7 +444,6 @@ function RequestCard({ request, onApprove, onDelete }) {
         isReady ? "border-emerald-500/30" : "border-amber-500/30"
       }`}
     >
-      {/* Top row: status + date */}
       <div className="flex items-center justify-between mb-3">
         <span
           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
@@ -436,7 +460,6 @@ function RequestCard({ request, onApprove, onDelete }) {
         </div>
       </div>
 
-      {/* Machine ID (with copy button) */}
       <div className="mb-3">
         <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
           Machine ID
@@ -466,7 +489,6 @@ function RequestCard({ request, onApprove, onDelete }) {
         </div>
       </div>
 
-      {/* Pickup / unit / office */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div>
           <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
@@ -494,7 +516,6 @@ function RequestCard({ request, onApprove, onDelete }) {
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-2">
         {!isReady && (
           <button
@@ -519,21 +540,16 @@ function RequestCard({ request, onApprove, onDelete }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   APPROVE MODAL — paste key ή upload .txt
-   ───────────────────────────────────────────────────────── */
 function ApproveModal({ request, onClose, onConfirm }) {
   const [activationKey, setActivationKey] = useState("");
   const [fileError, setFileError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   function extractKey(text) {
-    // Ψάχνει "Activation Key:" (case-insensitive), παίρνει το base64 μετά
     const match = text.match(
       /Activation\s*Key\s*[:=]\s*([A-Za-z0-9+/=]+)/i
     );
     if (match) return match[1].trim();
-    // Fallback: αν το αρχείο είναι σκέτο κλειδί
     const trimmed = text.trim();
     if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 20) {
       return trimmed;
@@ -594,7 +610,6 @@ function ApproveModal({ request, onClose, onConfirm }) {
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* File upload */}
           <div className="mb-4">
             <label className="block text-sm font-semibold text-slate-200 mb-2">
               Επιλογή 1: Ανέβασε το .txt από το SM Key Signer
@@ -618,7 +633,6 @@ function ApproveModal({ request, onClose, onConfirm }) {
             <div className="flex-1 h-px bg-slate-700" />
           </div>
 
-          {/* Paste key */}
           <div className="mb-5">
             <label
               htmlFor="key"
@@ -662,9 +676,6 @@ function ApproveModal({ request, onClose, onConfirm }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   DELETE CONFIRMATION MODAL
-   ───────────────────────────────────────────────────────── */
 function DeleteModal({ request, onClose, onConfirm }) {
   const [submitting, setSubmitting] = useState(false);
 
@@ -720,9 +731,61 @@ function DeleteModal({ request, onClose, onConfirm }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   BACKGROUND (ίδιο)
-   ───────────────────────────────────────────────────────── */
+function CleanupModal({ onClose, onConfirm }) {
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    await onConfirm();
+    setSubmitting(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-slate-800 border border-cyan-500/40 rounded-2xl p-6 shadow-2xl">
+        <div className="flex justify-center mb-4">
+          <div className="w-14 h-14 rounded-full bg-cyan-500/20 border-2 border-cyan-400/60 flex items-center justify-center">
+            <span className="text-2xl">🗓</span>
+          </div>
+        </div>
+
+        <h2 className="text-xl font-bold text-white text-center mb-2">
+          Καθαρισμός Παλιών Αιτήσεων;
+        </h2>
+        <p className="text-slate-300 text-center text-sm mb-4">
+          Θα διαγραφούν{" "}
+          <span className="text-cyan-200 font-semibold">όλες</span> οι αιτήσεις
+          με ημερομηνία υποβολής παλαιότερη των{" "}
+          <span className="text-cyan-200 font-semibold">30 ημερών</span>.
+        </p>
+        <p className="text-slate-400 text-center text-xs mb-6">
+          Αυτό γίνεται αυτόματα κάθε μέρα στις 06:00 (Ελληνική ώρα). Εδώ
+          μπορείς να το τρέξεις άμεσα.
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-white font-semibold text-sm transition-colors"
+          >
+            Άκυρο
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-semibold text-sm disabled:opacity-50 transition-all"
+          >
+            {submitting ? "Καθαρισμός..." : "Καθαρισμός τώρα"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Background() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
