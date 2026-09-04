@@ -4,10 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-// ─────────────────────────────────────────────────────────
-// Χαρακτήρες για τυχαίο pickup code — χωρίς αμφισημίες:
-// αποφεύγουμε 0/O, 1/l/I για να μη μπερδεύονται.
-// ─────────────────────────────────────────────────────────
 const PICKUP_CODE_CHARS =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 const PICKUP_CODE_LENGTH = 10;
@@ -25,13 +21,11 @@ function generateRandomPickupCode() {
 export default function RequestPage() {
   const router = useRouter();
 
-  // Form state
   const [machineId, setMachineId] = useState("");
   const [pickupCode, setPickupCode] = useState("");
   const [unit, setUnit] = useState("");
   const [office, setOffice] = useState("");
 
-  // UI state
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -45,7 +39,6 @@ export default function RequestPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    // Client-side: μόνο έλεγχος για κενά (καμία μορφή/μήκος)
     if (!machineId.trim()) {
       setErrorMsg("Το πεδίο Machine-id είναι υποχρεωτικό.");
       return;
@@ -72,23 +65,19 @@ export default function RequestPage() {
 
       if (!res.ok || !data.success) {
         setErrorMsg(
-          data.error ||
-            "Σφάλμα κατά την υποβολή. Δοκίμασε ξανά σε λίγο."
+          data.error || "Σφάλμα κατά την υποβολή. Δοκίμασε ξανά σε λίγο."
         );
         setSubmitting(false);
         return;
       }
 
-      // Επιτυχία
       setSubmittedData({
         pickupCode: pickupCode.trim(),
         submittedAt: data.submittedAt,
       });
       setSubmitted(true);
     } catch (err) {
-      setErrorMsg(
-        "Σφάλμα δικτύου. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά."
-      );
+      setErrorMsg("Σφάλμα δικτύου. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.");
       setSubmitting(false);
     }
   }
@@ -98,7 +87,6 @@ export default function RequestPage() {
       <Background />
 
       <main className="relative z-10 min-h-screen flex flex-col">
-        {/* Header */}
         <header className="flex items-center justify-between px-6 py-5">
           <button
             type="button"
@@ -130,7 +118,6 @@ export default function RequestPage() {
           </button>
         </header>
 
-        {/* Center content */}
         <div className="flex-1 flex items-start justify-center px-4 pb-12 pt-4">
           <div className="w-full max-w-xl">
             {submitted ? (
@@ -165,9 +152,6 @@ export default function RequestPage() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   FORM CARD
-   ───────────────────────────────────────────────────────── */
 function FormCard({
   machineId,
   setMachineId,
@@ -194,7 +178,6 @@ function FormCard({
         Συμπλήρωσε τα παρακάτω πεδία για να υποβάλλεις αίτηση.
       </p>
 
-      {/* Machine-id */}
       <div className="mb-5">
         <label
           htmlFor="machineId"
@@ -218,7 +201,6 @@ function FormCard({
         </p>
       </div>
 
-      {/* Pickup Code με ζάρια */}
       <div className="mb-3">
         <label
           htmlFor="pickupCode"
@@ -249,7 +231,6 @@ function FormCard({
         </div>
       </div>
 
-      {/* Warning για pickup code */}
       <div className="mb-5 flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
         <span className="text-amber-400 text-lg leading-none mt-0.5">⚠️</span>
         <p className="text-sm text-amber-100/90 leading-snug">
@@ -258,7 +239,6 @@ function FormCard({
         </p>
       </div>
 
-      {/* Μονάδα (προαιρετικό) */}
       <div className="mb-5">
         <label
           htmlFor="unit"
@@ -274,13 +254,12 @@ function FormCard({
           type="text"
           value={unit}
           onChange={(e) => setUnit(e.target.value)}
-          placeholder="π.χ. 31 ΛΔΒ"
+          placeholder="π.χ. 15 ΛΔΒ"
           className="w-full px-4 py-3 bg-slate-900/70 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-colors"
           autoComplete="off"
         />
       </div>
 
-      {/* Γραφείο (προαιρετικό) */}
       <div className="mb-6">
         <label
           htmlFor="office"
@@ -302,14 +281,12 @@ function FormCard({
         />
       </div>
 
-      {/* Error message */}
       {errorMsg && (
         <div className="mb-4 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
           <p className="text-sm text-red-200">{errorMsg}</p>
         </div>
       )}
 
-      {/* Submit button */}
       <button
         type="submit"
         disabled={submitting}
@@ -328,9 +305,6 @@ function FormCard({
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   SUCCESS CARD
-   ───────────────────────────────────────────────────────── */
 function SuccessCard({ pickupCode, onBackHome }) {
   const [copied, setCopied] = useState(false);
 
@@ -339,14 +313,11 @@ function SuccessCard({ pickupCode, onBackHome }) {
       await navigator.clipboard.writeText(pickupCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore — αν δεν επιτρέπεται το clipboard, ας δει τον κωδικό
-    }
+    } catch {}
   }
 
   return (
     <div className="bg-slate-800/60 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-6 md:p-8 shadow-2xl">
-      {/* Big check icon */}
       <div className="flex justify-center mb-4">
         <div className="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-400/60 flex items-center justify-center">
           <svg
@@ -372,7 +343,6 @@ function SuccessCard({ pickupCode, onBackHome }) {
         Θα ειδοποιηθώ αμέσως και θα ετοιμάσω το κλειδί ενεργοποίησης.
       </p>
 
-      {/* Pickup code display */}
       <div className="mb-5">
         <div className="text-xs uppercase tracking-widest text-slate-400 mb-2 text-center">
           Το Pickup Code σου
@@ -392,7 +362,6 @@ function SuccessCard({ pickupCode, onBackHome }) {
         </div>
       </div>
 
-      {/* Warning */}
       <div className="mb-6 flex items-start gap-2 px-3 py-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
         <span className="text-amber-400 text-lg leading-none mt-0.5">⚠️</span>
         <p className="text-sm text-amber-100/90 leading-snug">
@@ -402,7 +371,6 @@ function SuccessCard({ pickupCode, onBackHome }) {
         </p>
       </div>
 
-      {/* Next steps */}
       <div className="mb-6 bg-slate-900/40 border border-slate-700/50 rounded-lg p-4">
         <div className="text-xs uppercase tracking-widest text-cyan-400 mb-2 font-semibold">
           Τι κάνεις τώρα
@@ -411,7 +379,9 @@ function SuccessCard({ pickupCode, onBackHome }) {
           <li>Περίμενε λίγες ώρες να ετοιμαστεί το κλειδί σου.</li>
           <li>
             Επίστρεψε εδώ και πάτα{" "}
-            <span className="text-cyan-300 font-semibold">Αναζήτηση Αίτησης</span>
+            <span className="text-cyan-300 font-semibold">
+              Αναζήτηση Αίτησης
+            </span>
             .
           </li>
           <li>
@@ -432,9 +402,6 @@ function SuccessCard({ pickupCode, onBackHome }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   BACKGROUND (ίδιο με την αρχική)
-   ───────────────────────────────────────────────────────── */
 function Background() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">

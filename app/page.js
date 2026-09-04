@@ -26,9 +26,6 @@ export default function Home() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   BACKGROUND — Dark navy, circuit pattern, pulsing glow
-   ───────────────────────────────────────────────────────── */
 function Background() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
@@ -49,9 +46,6 @@ function Background() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   SPLASH INTRO
-   ───────────────────────────────────────────────────────── */
 function SplashIntro({ fading }) {
   return (
     <div
@@ -96,9 +90,6 @@ function SplashIntro({ fading }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   MAIN SCREEN — Welcome + 2 buttons
-   ───────────────────────────────────────────────────────── */
 function MainScreen() {
   const router = useRouter();
 
@@ -144,7 +135,7 @@ function MainScreen() {
 
             <button
               type="button"
-              onClick={() => alert("Θα υλοποιηθεί στη Φάση 3.3")}
+              onClick={() => router.push("/search")}
               className="group relative px-8 py-5 rounded-2xl bg-slate-800/60 backdrop-blur-sm border-2 border-cyan-500/40 text-cyan-100 font-semibold text-base hover:bg-slate-800/80 hover:border-cyan-400/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
             >
               <span className="flex items-center justify-center gap-3">
