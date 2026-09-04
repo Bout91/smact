@@ -1,15 +1,16 @@
 // ─────────────────────────────────────────────────────────
 // POST /api/request — Υποβολή νέας αίτησης κωδικού
 //
-// Φάση 3.2: Χωρίς πραγματική βάση δεδομένων ακόμα.
-// Απλά επικυρώνει τα δεδομένα, τα καταγράφει στα Netlify function logs,
-// και επιστρέφει επιτυχία.
-//
-// Στη Φάση 4 θα προστεθεί σύνδεση με Neon PostgreSQL για αποθήκευση.
+// Φάση 4.3: Πραγματικό INSERT στη Neon DB (αντικατάσταση mock).
 // Στη Φάση 5 θα προστεθεί κλήση προς ntfy.sh για push στο κινητό.
 // ─────────────────────────────────────────────────────────
 
+import { neon } from "@neondatabase/serverless";
+
 export const runtime = "nodejs";
+
+// Ένα SQL client instance, reused σε κάθε request
+const sql = neon(process.env.DATABASE_URL);
 
 export async function POST(request) {
   try {
@@ -17,8 +18,9 @@ export async function POST(request) {
 
     const machineId = String(body.machineId || "").trim();
     const pickupCode = String(body.pickupCode || "").trim();
-    const unit = String(body.unit || "").trim();
-    const office = String(body.office || "").trim();
+    // Άδεια προαιρετικά πεδία αποθηκεύονται ως NULL, όχι κενό string
+    const unit = String(body.unit || "").trim() || null;
+    const office = String(body.office || "").trim() || null;
 
     // Έλεγχος υποχρεωτικών πεδίων (μόνο "όχι κενό")
     if (!machineId) {
@@ -34,12 +36,23 @@ export async function POST(request) {
       );
     }
 
-    const submittedAt = new Date().toISOString();
+    // Εισαγωγή στη DB — το status είναι 'pending' από default,
+    // το id (UUID) και submitted_at (NOW) παράγονται αυτόματα από την DB.
+    const rows = await sql`
+      INSERT INTO requests (machine_id, pickup_code, unit, office)
+      VALUES (${machineId}, ${pickupCode}, ${unit}, ${office})
+      RETURNING id, submitted_at
+    `;
 
-    // Log — αυτά θα φαίνονται στα Netlify function logs
-    console.log("[SMAct] New activation request:", {
+    const inserted = rows[0];
+    const submittedAt =
+      inserted.submitted_at instanceof Date
+        ? inserted.submitted_at.toISOString()
+        : inserted.submitted_at;
+
+    console.log("[SMAct] New request saved:", {
+      id: inserted.id,
       submittedAt,
-      machineId,
       pickupCode,
       unit: unit || "(none)",
       office: office || "(none)",

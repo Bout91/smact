@@ -1,22 +1,15 @@
 // ─────────────────────────────────────────────────────────
 // POST /api/search — Αναζήτηση αίτησης με pickup code
 //
-// Φάση 3.3: MOCK responses (χωρίς DB).
-//   • "test-ready"    → status: "ready"    (με fake activation key)
-//   • "test-pending"  → status: "pending"
-//   • οτιδήποτε άλλο  → status: "not_found"
-//
-// Στη Φάση 4 θα αντικατασταθεί με πραγματικό query στη Neon DB.
-// Θυμήσου να ΑΦΑΙΡΕΣΕΙΣ τα magic test strings όταν συνδεθεί η DB!
+// Φάση 4.3: Πραγματικό SELECT από τη Neon DB.
+// Αφαιρέθηκαν τα magic test strings της Φάσης 3.3.
 // ─────────────────────────────────────────────────────────
+
+import { neon } from "@neondatabase/serverless";
 
 export const runtime = "nodejs";
 
-// Fake data — μόνο για Φάση 3.3
-const FAKE_MACHINE_ID = "49408922-6ea1-488f-8293-6d37cdb97a2d";
-const FAKE_ACTIVATION_KEY =
-  "MEUCIQD5vN8xK2mJ4pQ9rT7wY6uHnB3cE1fA8sL0kZ2gWvR7hAIgYxT4pM6nQ9sE" +
-  "3bK7mL2wP8rY5vN1uH4dCzA6xJ0iF9tK2mBcHeLpQwStRvUxYzAaBbCcDdEeFfGg";
+const sql = neon(process.env.DATABASE_URL);
 
 export async function POST(request) {
   try {
@@ -30,37 +23,51 @@ export async function POST(request) {
       );
     }
 
-    // MOCK — αφαίρεσε αυτό το block στη Φάση 4
-    if (pickupCode === "test-ready") {
-      const now = new Date();
-      const submittedAt = new Date(
-        now.getTime() - 2 * 60 * 60 * 1000
-      ).toISOString(); // 2 ώρες πριν
-      const readyAt = new Date(
-        now.getTime() - 30 * 60 * 1000
-      ).toISOString(); // 30 λεπτά πριν
+    // Αν κάποιος χρησιμοποίησε το ίδιο pickup code σε πολλές αιτήσεις
+    // (πχ ξέχασε την προηγούμενη), επιστρέφουμε την ΠΙΟ ΠΡΟΣΦΑΤΗ.
+    const rows = await sql`
+      SELECT
+        id,
+        machine_id,
+        pickup_code,
+        status,
+        activation_key,
+        submitted_at,
+        ready_at
+      FROM requests
+      WHERE pickup_code = ${pickupCode}
+      ORDER BY submitted_at DESC
+      LIMIT 1
+    `;
+
+    if (rows.length === 0) {
+      return Response.json({ status: "not_found" });
+    }
+
+    const row = rows[0];
+    const submittedAt =
+      row.submitted_at instanceof Date
+        ? row.submitted_at.toISOString()
+        : row.submitted_at;
+    const readyAt =
+      row.ready_at instanceof Date
+        ? row.ready_at.toISOString()
+        : row.ready_at;
+
+    if (row.status === "ready" && row.activation_key) {
       return Response.json({
         status: "ready",
         submittedAt,
         readyAt,
-        machineId: FAKE_MACHINE_ID,
-        activationKey: FAKE_ACTIVATION_KEY,
+        machineId: row.machine_id,
+        activationKey: row.activation_key,
       });
     }
 
-    if (pickupCode === "test-pending") {
-      const submittedAt = new Date(
-        Date.now() - 45 * 60 * 1000
-      ).toISOString(); // 45 λεπτά πριν
-      return Response.json({
-        status: "pending",
-        submittedAt,
-      });
-    }
-
-    // Default για Φάση 3.3: πάντα "not_found"
+    // Αλλιώς pending (status='pending' ή status='ready' χωρίς key για κάποιο λόγο)
     return Response.json({
-      status: "not_found",
+      status: "pending",
+      submittedAt,
     });
   } catch (err) {
     console.error("[SMAct] Search handler error:", err);

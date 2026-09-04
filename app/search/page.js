@@ -11,7 +11,6 @@ export default function SearchPage() {
   const [searching, setSearching] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [result, setResult] = useState(null);
-  // result = { status, submittedAt?, readyAt?, activationKey?, machineId?, pickupCode? }
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -41,7 +40,6 @@ export default function SearchPage() {
         return;
       }
 
-      // Κρατάμε και το pickup code στο result για display
       setResult({ ...data, pickupCode: pickupCode.trim() });
     } catch (err) {
       setErrorMsg("Σφάλμα δικτύου. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.");
@@ -120,9 +118,6 @@ export default function SearchPage() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   SEARCH FORM
-   ───────────────────────────────────────────────────────── */
 function SearchCard({
   pickupCode,
   setPickupCode,
@@ -186,24 +181,10 @@ function SearchCard({
           "Αναζήτηση Αίτησης"
         )}
       </button>
-
-      {/* Dev hint — για δοκιμή στη Φάση 3.3 */}
-      <div className="mt-6 pt-4 border-t border-slate-700/50">
-        <p className="text-[11px] text-slate-500 leading-relaxed">
-          <span className="font-semibold text-slate-400">Δοκιμαστικά:</span>{" "}
-          Δοκίμασε <code className="text-cyan-400/70">test-ready</code> ή{" "}
-          <code className="text-cyan-400/70">test-pending</code>. Οποιοδήποτε
-          άλλο κείμενο θα εμφανίσει «δεν βρέθηκε». (Στη Φάση 4 θα υπάρχει
-          πραγματική βάση δεδομένων.)
-        </p>
-      </div>
     </form>
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   READY — Το κλειδί είναι έτοιμο
-   ───────────────────────────────────────────────────────── */
 function ReadyCard({ result, onReset }) {
   const [copied, setCopied] = useState(false);
 
@@ -211,7 +192,6 @@ function ReadyCard({ result, onReset }) {
     ? new Date(result.readyAt).toLocaleString("el-GR")
     : "";
 
-  // Το πλήρες περιεχόμενο του .txt αρχείου
   const fileContent = buildActivationFileContent({
     machineId: result.machineId,
     pickupCode: result.pickupCode,
@@ -268,7 +248,6 @@ function ReadyCard({ result, onReset }) {
         </p>
       )}
 
-      {/* Download button */}
       <button
         type="button"
         onClick={handleDownload}
@@ -280,7 +259,6 @@ function ReadyCard({ result, onReset }) {
         </span>
       </button>
 
-      {/* Full key display for copy/paste */}
       <div className="mb-5">
         <div className="flex items-center justify-between mb-2">
           <div className="text-xs uppercase tracking-widest text-slate-400 font-semibold">
@@ -312,7 +290,6 @@ function ReadyCard({ result, onReset }) {
         />
       </div>
 
-      {/* Instructions */}
       <div className="mb-6 bg-slate-900/40 border border-slate-700/50 rounded-lg p-4">
         <div className="text-xs uppercase tracking-widest text-cyan-400 mb-2 font-semibold">
           Οδηγίες ενεργοποίησης
@@ -320,7 +297,8 @@ function ReadyCard({ result, onReset }) {
         <ol className="text-sm text-slate-300 space-y-2 list-decimal list-inside">
           <li>Άνοιξε το Service Manager Pro στον υπολογιστή σου.</li>
           <li>
-            Πήγαινε στη <span className="text-cyan-300">Διαχείριση Srv Manager</span>.
+            Πήγαινε στη{" "}
+            <span className="text-cyan-300">Διαχείριση Srv Manager</span>.
           </li>
           <li>
             Στο πεδίο «Επικόλλησε το κλειδί ενεργοποίησης εδώ...» κάνε paste το
@@ -341,9 +319,6 @@ function ReadyCard({ result, onReset }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   PENDING — Η αίτηση εκκρεμεί
-   ───────────────────────────────────────────────────────── */
 function PendingCard({ result, onReset }) {
   const submittedAt = result.submittedAt
     ? new Date(result.submittedAt).toLocaleString("el-GR")
@@ -392,9 +367,6 @@ function PendingCard({ result, onReset }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   NOT FOUND — Δεν βρέθηκε
-   ───────────────────────────────────────────────────────── */
 function NotFoundCard({ result, onReset }) {
   const router = useRouter();
 
@@ -456,9 +428,6 @@ function NotFoundCard({ result, onReset }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   Helper: build activation file content
-   ───────────────────────────────────────────────────────── */
 function buildActivationFileContent({
   machineId,
   pickupCode,
@@ -484,9 +453,6 @@ function buildActivationFileContent({
   ].join("\n");
 }
 
-/* ─────────────────────────────────────────────────────────
-   BACKGROUND (ίδιο)
-   ───────────────────────────────────────────────────────── */
 function Background() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
