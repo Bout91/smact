@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────
 // POST /api/request — Υποβολή νέας αίτησης κωδικού
 //
-// Φάση 5: Μετά από επιτυχή αποθήκευση στη DB, στέλνει push
-// notification στο κινητό του διαχειριστή μέσω ntfy.sh.
+// Φάση 7 additions:
+//   • Cloudflare Turnstile verification (captcha)
+//   • Rate limiting: max 10 αιτήσεις/λεπτό ανά IP
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -12,58 +13,165 @@ export const runtime = "nodejs";
 const sql = neon(process.env.DATABASE_URL);
 
 const ADMIN_URL = "https://smact.netlify.app/admin";
+const RATE_LIMIT_MAX = 10; // αιτήσεις/λεπτό
+const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 // ─────────────────────────────────────────────────────────
-// Push notification στο κινητό του διαχειριστή
-// Fire-and-forget: αν πέσει το ntfy, δεν σπάει η υποβολή.
+// Turnstile verification
 // ─────────────────────────────────────────────────────────
-async function sendAdminNotification({ pickupCode, unit, office }) {
-  const topic = process.env.NTFY_TOPIC;
-  if (!topic) {
-    console.warn("[SMAct] NTFY_TOPIC δεν έχει οριστεί — παραλείπω push");
-    return;
+async function verifyTurnstile(token, ip) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) {
+    console.warn(
+      "[SMAct] TURNSTILE_SECRET_KEY not set — παρακάμπτω verification"
+    );
+    return { ok: true };
+  }
+  if (!token) {
+    return { ok: false, error: "Λείπει ο έλεγχος ασφαλείας (captcha)." };
   }
 
   try {
-    // Κτίζουμε το μήνυμα με τα διαθέσιμα στοιχεία
+    const params = new URLSearchParams();
+    params.append("secret", secret);
+    params.append("response", token);
+    if (ip) params.append("remoteip", ip);
+
+    const response = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        body: params,
+      }
+    );
+
+    const data = await response.json();
+
+    if (data.success === true) {
+      return { ok: true };
+    }
+    console.warn("[SMAct] Turnstile verification failed:", data);
+    return {
+      ok: false,
+      error: "Ο έλεγχος ασφαλείας απέτυχε. Ανανέωσε τη σελίδα και δοκίμασε ξανά.",
+    };
+  } catch (err) {
+    console.error("[SMAct] Turnstile verify error:", err);
+    return {
+      ok: false,
+      error: "Αδυναμία επαλήθευσης ασφαλείας. Δοκίμασε ξανά σε λίγο.",
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Rate limiting — μέτρημα hits ανά IP στο τελευταίο λεπτό
+// ─────────────────────────────────────────────────────────
+function getClientIp(request) {
+  // Netlify προσθέτει x-nf-client-connection-ip, standard είναι x-forwarded-for
+  const nfIp = request.headers.get("x-nf-client-connection-ip");
+  if (nfIp) return nfIp.trim();
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return "unknown";
+}
+
+async function checkAndRecordRateLimit(ip) {
+  try {
+    // Καθαρισμός παλαιών εγγραφών (ancient hits >10 λεπτών)
+    // Το κάνουμε καιρικά όταν κάποιος υποβάλλει — cheap.
+    await sql`
+      DELETE FROM rate_limit_hits
+      WHERE hit_at < NOW() - INTERVAL '10 minutes'
+    `;
+
+    // Μέτρα hits του IP στα τελευταία 60 δευτ.
+    const rows = await sql`
+      SELECT COUNT(*)::int AS cnt
+      FROM rate_limit_hits
+      WHERE ip = ${ip}
+        AND hit_at > NOW() - INTERVAL '1 minute'
+    `;
+    const cnt = rows[0].cnt;
+
+    if (cnt >= RATE_LIMIT_MAX) {
+      return {
+        ok: false,
+        error:
+          "Πολλές αιτήσεις σε σύντομο χρονικό διάστημα. Δοκίμασε ξανά σε 1 λεπτό.",
+      };
+    }
+
+    // Καταγραφή του νέου hit
+    await sql`INSERT INTO rate_limit_hits (ip) VALUES (${ip})`;
+
+    return { ok: true };
+  } catch (err) {
+    console.error("[SMAct] Rate limit check error:", err);
+    // Αν πέσει η DB για το rate limit, μη μπλοκάρουμε τους νόμιμους χρήστες
+    return { ok: true };
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Push notification στο κινητό (fire-and-forget)
+// ─────────────────────────────────────────────────────────
+async function sendAdminNotification({ pickupCode, unit, office }) {
+  const topic = process.env.NTFY_TOPIC;
+  if (!topic) return;
+
+  try {
     const lines = [`Pickup Code: ${pickupCode}`];
     if (unit) lines.push(`Μονάδα: ${unit}`);
     if (office) lines.push(`Γραφείο: ${office}`);
 
-    // Χρησιμοποιούμε JSON body — υποστηρίζει UTF-8 για Ελληνικά/emoji
-    // χωρίς ανάγκη για header encoding.
     const payload = {
-      topic: topic,
+      topic,
       title: "🔔 SMAct: Νέα αίτηση",
       message: lines.join("\n"),
-      priority: 2, // low: arrives silently, χωρίς ήχο/vibration
+      priority: 2, // low
       tags: ["key"],
-      click: ADMIN_URL, // tap-to-open → πάει στο admin panel
+      click: ADMIN_URL,
     };
 
-    const response = await fetch("https://ntfy.sh/", {
+    await fetch("https://ntfy.sh/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-
-    if (response.ok) {
-      console.log("[SMAct] Push notification στάλθηκε");
-    } else {
-      console.warn(
-        `[SMAct] ntfy response status: ${response.status} ${response.statusText}`
-      );
-    }
   } catch (err) {
-    console.warn("[SMAct] Απέτυχε η αποστολή push:", err.message);
-    // Δεν πετάμε — η αίτηση έχει ήδη αποθηκευτεί επιτυχώς
+    console.warn("[SMAct] Push notification failed:", err.message);
   }
 }
 
+// ─────────────────────────────────────────────────────────
+// Main POST handler
+// ─────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
+    const ip = getClientIp(request);
+
+    // 1) Rate limiting
+    const rateCheck = await checkAndRecordRateLimit(ip);
+    if (!rateCheck.ok) {
+      return Response.json(
+        { success: false, error: rateCheck.error },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
 
+    // 2) Turnstile verification
+    const captcha = await verifyTurnstile(body.turnstileToken, ip);
+    if (!captcha.ok) {
+      return Response.json(
+        { success: false, error: captcha.error },
+        { status: 400 }
+      );
+    }
+
+    // 3) Πεδία
     const machineId = String(body.machineId || "").trim();
     const pickupCode = String(body.pickupCode || "").trim();
     const unit = String(body.unit || "").trim() || null;
@@ -82,7 +190,7 @@ export async function POST(request) {
       );
     }
 
-    // Έλεγχος για διπλότυπο pickup code
+    // 4) Duplicate pickup code check
     const existing = await sql`
       SELECT id FROM requests WHERE pickup_code = ${pickupCode} LIMIT 1
     `;
@@ -97,6 +205,7 @@ export async function POST(request) {
       );
     }
 
+    // 5) INSERT
     const rows = await sql`
       INSERT INTO requests (machine_id, pickup_code, unit, office)
       VALUES (${machineId}, ${pickupCode}, ${unit}, ${office})
@@ -117,10 +226,7 @@ export async function POST(request) {
       office: office || "(none)",
     });
 
-    // Push notification στον διαχειριστή (fire-and-forget)
-    // Το await κρατάει τη function ζωντανή μέχρι να στείλει το push
-    // — μικρή καθυστέρηση (~200-500ms) στην απόκριση, αλλά αποφεύγει
-    // να τερματίσει η serverless function πριν φύγει το request.
+    // 6) Push notification στον διαχειριστή
     await sendAdminNotification({ pickupCode, unit, office });
 
     return Response.json({
@@ -130,10 +236,7 @@ export async function POST(request) {
   } catch (err) {
     console.error("[SMAct] Request handler error:", err);
     return Response.json(
-      {
-        success: false,
-        error: "Σφάλμα διακομιστή. Δοκίμασε ξανά σε λίγο.",
-      },
+      { success: false, error: "Σφάλμα διακομιστή. Δοκίμασε ξανά σε λίγο." },
       { status: 500 }
     );
   }

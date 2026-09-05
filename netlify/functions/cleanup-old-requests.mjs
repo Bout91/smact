@@ -1,12 +1,11 @@
 // ─────────────────────────────────────────────────────────
-// Netlify Scheduled Function — Καθημερινή διαγραφή αιτήσεων >30 ημερών
+// Netlify Scheduled Function — Καθημερινό cleanup (03:00 UTC)
 //
-// Τρέχει αυτόματα στις 03:00 UTC κάθε μέρα.
-// (05:00 Ελληνικής χειμερινής ώρας, 06:00 θερινής)
-//
-// Δεν εκτίθεται σαν HTTP endpoint — μόνο το Netlify το καλεί.
-// Για manual trigger, χρησιμοποιείται το /api/admin/cleanup που είναι
-// admin-protected.
+// Φάση 7 αλλαγή:
+//   • Pending >30 μερών → DELETE
+//   • Ready >30 μερών   → UPDATE hidden_from_completed_at
+//                          (κρύβεται από Ολοκληρωμένες, μένει στο Ιστορικό)
+//   • Rate limit hits >10 λεπτών → DELETE (housekeeping)
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -18,32 +17,43 @@ export default async () => {
   try {
     const sql = neon(process.env.DATABASE_URL);
 
-    // Διαγράφει όλες τις αιτήσεις με submitted_at > 30 μέρες πριν
-    // (εφαρμόζεται και σε pending και σε ready)
-    const deleted = await sql`
+    // 1) DELETE παλιές pending
+    const deletedPending = await sql`
       DELETE FROM requests
-      WHERE submitted_at < NOW() - INTERVAL '30 days'
-      RETURNING id, pickup_code, status, submitted_at
+      WHERE status = 'pending'
+        AND submitted_at < NOW() - INTERVAL '30 days'
+      RETURNING id
+    `;
+
+    // 2) HIDE παλιές ready από Ολοκληρωμένες
+    const hiddenReady = await sql`
+      UPDATE requests
+      SET hidden_from_completed_at = NOW()
+      WHERE status = 'ready'
+        AND submitted_at < NOW() - INTERVAL '30 days'
+        AND hidden_from_completed_at IS NULL
+      RETURNING id
+    `;
+
+    // 3) Καθαρισμός παλιών rate limit hits
+    const deletedHits = await sql`
+      DELETE FROM rate_limit_hits
+      WHERE hit_at < NOW() - INTERVAL '10 minutes'
+      RETURNING ip
     `;
 
     console.log(
-      `[SMAct Cleanup] Deleted ${deleted.length} request(s) older than 30 days`
+      `[SMAct Cleanup] deleted ${deletedPending.length} pending, ` +
+        `hid ${hiddenReady.length} ready, ` +
+        `cleaned ${deletedHits.length} rate-limit hits`
     );
-
-    if (deleted.length > 0) {
-      // Log για audit trail (φαίνεται στα Netlify function logs)
-      for (const row of deleted) {
-        console.log(
-          `[SMAct Cleanup]  - id=${row.id} status=${row.status} ` +
-            `submitted=${row.submitted_at}`
-        );
-      }
-    }
 
     return new Response(
       JSON.stringify({
         ok: true,
-        deleted: deleted.length,
+        deletedPending: deletedPending.length,
+        hiddenReady: hiddenReady.length,
+        deletedRateLimitHits: deletedHits.length,
         startedAt,
         finishedAt: new Date().toISOString(),
       }),
@@ -64,8 +74,7 @@ export default async () => {
   }
 };
 
-// Cron: 03:00 UTC κάθε μέρα
-// (Netlify χρησιμοποιεί standard cron expression: minute hour day-of-month month day-of-week)
+// Cron: 03:00 UTC κάθε μέρα (06:00 Ελληνική θερινή ώρα)
 export const config = {
   schedule: "0 3 * * *",
 };

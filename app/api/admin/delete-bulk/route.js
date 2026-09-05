@@ -1,10 +1,7 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/admin/cleanup — Manual trigger
-//
-// Φάση 7 αλλαγή:
-//   • Pending >30 μερών → DELETE
-//   • Ready >30 μερών   → UPDATE hidden_from_completed_at (κρύβεται
-//                          από Ολοκληρωμένες, μένει στο Ιστορικό)
+// POST /api/admin/delete-bulk
+// Body: { ids: [uuid, uuid, ...] }
+// Διαγράφει πολλαπλές αιτήσεις μαζί (για το Ιστορικό).
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -39,39 +36,39 @@ export async function POST(request) {
   }
 
   try {
-    // 1) DELETE παλιές pending
-    const deletedPending = await sql`
+    const body = await request.json();
+    const ids = Array.isArray(body.ids) ? body.ids : [];
+
+    // Έλεγχος: μόνο valid UUIDs
+    const validIds = ids
+      .map((x) => String(x || "").trim())
+      .filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+
+    if (validIds.length === 0) {
+      return Response.json(
+        { error: "Δεν δόθηκαν έγκυρα ids για διαγραφή." },
+        { status: 400 }
+      );
+    }
+
+    if (validIds.length > 500) {
+      return Response.json(
+        { error: "Πάρα πολλά items σε ένα batch (max 500)." },
+        { status: 400 }
+      );
+    }
+
+    const rows = await sql`
       DELETE FROM requests
-      WHERE status = 'pending'
-        AND submitted_at < NOW() - INTERVAL '30 days'
+      WHERE id = ANY(${validIds}::uuid[])
       RETURNING id
     `;
 
-    // 2) HIDE παλιές ready από Ολοκληρωμένες (μένουν στο Ιστορικό)
-    const hiddenReady = await sql`
-      UPDATE requests
-      SET hidden_from_completed_at = NOW()
-      WHERE status = 'ready'
-        AND submitted_at < NOW() - INTERVAL '30 days'
-        AND hidden_from_completed_at IS NULL
-      RETURNING id
-    `;
+    console.log(`[SMAct] Bulk delete: ${rows.length} requests deleted`);
 
-    console.log(
-      `[SMAct] Manual cleanup: deleted ${deletedPending.length} pending, hid ${hiddenReady.length} ready`
-    );
-
-    return Response.json({
-      ok: true,
-      deletedPending: deletedPending.length,
-      hiddenReady: hiddenReady.length,
-      total: deletedPending.length + hiddenReady.length,
-    });
+    return Response.json({ ok: true, deleted: rows.length });
   } catch (err) {
-    console.error("[SMAct] Manual cleanup error:", err);
-    return Response.json(
-      { error: "Σφάλμα διακομιστή." },
-      { status: 500 }
-    );
+    console.error("[SMAct] Bulk delete error:", err);
+    return Response.json({ error: "Σφάλμα διακομιστή." }, { status: 500 });
   }
 }

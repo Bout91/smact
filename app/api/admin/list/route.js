@@ -1,6 +1,11 @@
 // ─────────────────────────────────────────────────────────
-// GET /api/admin/list?status=pending|ready
-// Επιστρέφει τη λίστα αιτήσεων για το admin panel.
+// GET /api/admin/list?status=pending|ready|history
+//
+// Φάση 7: Νέα κατάσταση "history" — όλες οι εγκεκριμένες.
+//   • pending  → status='pending' (auto-delete μετά 30 μέρες)
+//   • ready    → status='ready' AND hidden_from_completed_at IS NULL
+//                (κρύβεται από αυτό το tab μετά 30 μέρες)
+//   • history  → status='ready' (ΟΛΕΣ, ΠΟΤΕ auto-delete)
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -40,7 +45,6 @@ export async function GET(request) {
 
     let rows;
     if (status === "pending") {
-      // Οι παλιότερες πρώτα, ώστε να τις προλαβαίνει ο Νίκος
       rows = await sql`
         SELECT id, machine_id, pickup_code, unit, office, status,
                activation_key, submitted_at, ready_at
@@ -49,7 +53,16 @@ export async function GET(request) {
         ORDER BY submitted_at ASC
       `;
     } else if (status === "ready") {
-      // Οι πιο πρόσφατες πρώτα
+      // Εμφανίζονται μόνο όσες δεν έχουν κρυφτεί από το cleanup
+      rows = await sql`
+        SELECT id, machine_id, pickup_code, unit, office, status,
+               activation_key, submitted_at, ready_at
+        FROM requests
+        WHERE status = 'ready' AND hidden_from_completed_at IS NULL
+        ORDER BY ready_at DESC
+      `;
+    } else if (status === "history") {
+      // Όλες οι ready ανεξαρτήτως χρόνου
       rows = await sql`
         SELECT id, machine_id, pickup_code, unit, office, status,
                activation_key, submitted_at, ready_at
@@ -70,7 +83,10 @@ export async function GET(request) {
     const counts = await sql`
       SELECT
         COUNT(*) FILTER (WHERE status = 'pending') AS pending_count,
-        COUNT(*) FILTER (WHERE status = 'ready')   AS ready_count
+        COUNT(*) FILTER (
+          WHERE status = 'ready' AND hidden_from_completed_at IS NULL
+        ) AS ready_count,
+        COUNT(*) FILTER (WHERE status = 'ready') AS history_count
       FROM requests
     `;
 
@@ -88,13 +104,12 @@ export async function GET(request) {
             ? r.submitted_at.toISOString()
             : r.submitted_at,
         readyAt:
-          r.ready_at instanceof Date
-            ? r.ready_at.toISOString()
-            : r.ready_at,
+          r.ready_at instanceof Date ? r.ready_at.toISOString() : r.ready_at,
       })),
       counts: {
         pending: Number(counts[0].pending_count),
         ready: Number(counts[0].ready_count),
+        history: Number(counts[0].history_count),
       },
     });
   } catch (err) {

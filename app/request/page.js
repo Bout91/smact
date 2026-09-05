@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Script from "next/script";
+
+// Το Turnstile Site Key από τα Cloudflare
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 const PICKUP_CODE_CHARS =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -31,8 +35,70 @@ export default function RequestPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
 
+  // Turnstile state
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef(null);
+  const turnstileWidgetIdRef = useRef(null);
+
+  // Render Turnstile widget όταν φορτώσει το Cloudflare script
+  useEffect(() => {
+    if (submitted) return;
+    if (!TURNSTILE_SITE_KEY) return;
+
+    let cancelled = false;
+
+    function tryRender() {
+      if (cancelled) return;
+      if (typeof window === "undefined" || !window.turnstile) {
+        // Το script δεν έχει φορτώσει ακόμα — δοκίμασε πάλι σε λίγο
+        setTimeout(tryRender, 200);
+        return;
+      }
+      if (!turnstileRef.current) return;
+      if (turnstileWidgetIdRef.current) return; // ήδη renderαρισμένο
+
+      try {
+        turnstileWidgetIdRef.current = window.turnstile.render(
+          turnstileRef.current,
+          {
+            sitekey: TURNSTILE_SITE_KEY,
+            theme: "dark",
+            language: "el",
+            callback: (token) => setTurnstileToken(token),
+            "error-callback": () => setTurnstileToken(""),
+            "expired-callback": () => setTurnstileToken(""),
+            "timeout-callback": () => setTurnstileToken(""),
+          }
+        );
+      } catch (err) {
+        console.warn("Turnstile render failed:", err);
+      }
+    }
+
+    tryRender();
+
+    return () => {
+      cancelled = true;
+      if (turnstileWidgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        } catch {}
+        turnstileWidgetIdRef.current = null;
+      }
+    };
+  }, [submitted]);
+
   function handleRandomize() {
     setPickupCode(generateRandomPickupCode());
+  }
+
+  function resetTurnstile() {
+    setTurnstileToken("");
+    if (turnstileWidgetIdRef.current && window.turnstile) {
+      try {
+        window.turnstile.reset(turnstileWidgetIdRef.current);
+      } catch {}
+    }
   }
 
   async function handleSubmit(e) {
@@ -47,6 +113,12 @@ export default function RequestPage() {
       setErrorMsg("Το πεδίο Pickup Code είναι υποχρεωτικό.");
       return;
     }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setErrorMsg(
+        "Παρακαλώ ολοκλήρωσε τον έλεγχο ασφαλείας (captcha) πριν την υποβολή."
+      );
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -58,6 +130,7 @@ export default function RequestPage() {
           pickupCode: pickupCode.trim(),
           unit: unit.trim(),
           office: office.trim(),
+          turnstileToken: turnstileToken,
         }),
       });
 
@@ -67,6 +140,8 @@ export default function RequestPage() {
         setErrorMsg(
           data.error || "Σφάλμα κατά την υποβολή. Δοκίμασε ξανά σε λίγο."
         );
+        // Reset το captcha ώστε ο χρήστης να δοκιμάσει ξανά
+        resetTurnstile();
         setSubmitting(false);
         return;
       }
@@ -78,12 +153,21 @@ export default function RequestPage() {
       setSubmitted(true);
     } catch (err) {
       setErrorMsg("Σφάλμα δικτύου. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.");
+      resetTurnstile();
       setSubmitting(false);
     }
   }
 
   return (
     <>
+      {/* Cloudflare Turnstile script */}
+      {TURNSTILE_SITE_KEY && !submitted && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+        />
+      )}
+
       <Background />
 
       <main className="relative z-10 min-h-screen flex flex-col">
@@ -139,6 +223,8 @@ export default function RequestPage() {
                 onSubmit={handleSubmit}
                 submitting={submitting}
                 errorMsg={errorMsg}
+                turnstileRef={turnstileRef}
+                hasSiteKey={!!TURNSTILE_SITE_KEY}
               />
             )}
           </div>
@@ -165,6 +251,8 @@ function FormCard({
   onSubmit,
   submitting,
   errorMsg,
+  turnstileRef,
+  hasSiteKey,
 }) {
   return (
     <form
@@ -280,6 +368,17 @@ function FormCard({
           autoComplete="off"
         />
       </div>
+
+      {/* Turnstile widget */}
+      {hasSiteKey && (
+        <div className="mb-5">
+          <div
+            ref={turnstileRef}
+            className="flex justify-center"
+            aria-label="Έλεγχος ασφαλείας"
+          />
+        </div>
+      )}
 
       {errorMsg && (
         <div className="mb-4 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -161,19 +161,24 @@ function LoginScreen({ onSuccess }) {
 
 function AdminDashboard({ onLogout }) {
   const router = useRouter();
-  const [tab, setTab] = useState("pending");
+  const [tab, setTab] = useState("pending"); // "pending" | "ready" | "history"
   const [requests, setRequests] = useState([]);
-  const [counts, setCounts] = useState({ pending: 0, ready: 0 });
+  const [counts, setCounts] = useState({ pending: 0, ready: 0, history: 0 });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
   const [approveTarget, setApproveTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  // Bulk selection state (μόνο για το Ιστορικό)
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
+    setSelectedIds(new Set());
     try {
       const res = await fetch(`/api/admin/list?status=${tab}`, {
         credentials: "include",
@@ -189,7 +194,7 @@ function AdminDashboard({ onLogout }) {
         return;
       }
       setRequests(data.requests || []);
-      setCounts(data.counts || { pending: 0, ready: 0 });
+      setCounts(data.counts || { pending: 0, ready: 0, history: 0 });
     } catch {
       setErrorMsg("Σφάλμα δικτύου.");
     } finally {
@@ -266,12 +271,19 @@ function AdminDashboard({ onLogout }) {
         return;
       }
       setCleanupOpen(false);
+      const messages = [];
+      if (data.deletedPending > 0)
+        messages.push(
+          `Διαγράφηκαν ${data.deletedPending} εκκρεμείς αιτήσεις.`
+        );
+      if (data.hiddenReady > 0)
+        messages.push(
+          `Αποσύρθηκαν ${data.hiddenReady} ολοκληρωμένες από το tab (παραμένουν στο Ιστορικό).`
+        );
       alert(
-        data.deleted === 0
-          ? "Δεν βρέθηκαν αιτήσεις παλαιότερες των 30 ημερών."
-          : `Διαγράφηκαν ${data.deleted} αιτήσ${
-              data.deleted === 1 ? "η" : "εις"
-            } παλαιότερες των 30 ημερών.`
+        messages.length > 0
+          ? messages.join("\n")
+          : "Δεν βρέθηκαν αιτήσεις παλαιότερες των 30 ημερών."
       );
       await loadRequests();
     } catch {
@@ -279,10 +291,57 @@ function AdminDashboard({ onLogout }) {
     }
   }
 
+  async function handleBulkDeleteConfirm() {
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await fetch("/api/admin/delete-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Σφάλμα κατά τη διαγραφή.");
+        return;
+      }
+      setBulkDeleteOpen(false);
+      alert(
+        `Διαγράφηκαν ${data.deleted} αιτήσ${
+          data.deleted === 1 ? "η" : "εις"
+        } από το Ιστορικό.`
+      );
+      await loadRequests();
+    } catch {
+      alert("Σφάλμα δικτύου.");
+    }
+  }
+
+  const isHistory = tab === "history";
+  const allVisibleIds = useMemo(() => requests.map((r) => r.id), [requests]);
+  const allSelected =
+    allVisibleIds.length > 0 &&
+    allVisibleIds.every((id) => selectedIds.has(id));
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allVisibleIds));
+    }
+  }
+
+  function toggleOne(id) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  }
+
   return (
     <>
       <main className="relative z-10 min-h-screen flex flex-col">
-        <header className="flex items-center justify-between px-6 py-5">
+        <header className="flex items-center justify-between px-6 py-5 flex-wrap gap-3">
           <button
             type="button"
             onClick={() => router.push("/")}
@@ -303,7 +362,7 @@ function AdminDashboard({ onLogout }) {
             </div>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={loadRequests}
@@ -315,7 +374,7 @@ function AdminDashboard({ onLogout }) {
             <button
               type="button"
               onClick={() => setCleanupOpen(true)}
-              title="Διαγραφή αιτήσεων παλαιότερων των 30 ημερών"
+              title="Καθαρισμός αιτήσεων παλαιότερων των 30 ημερών"
               className="px-3 py-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-200 text-sm transition-colors"
             >
               🗓 Καθαρισμός
@@ -331,7 +390,7 @@ function AdminDashboard({ onLogout }) {
         </header>
 
         <div className="px-4 md:px-6 pb-12 max-w-4xl mx-auto w-full">
-          <div className="flex gap-2 mb-6 border-b border-slate-700/50">
+          <div className="flex gap-2 mb-6 border-b border-slate-700/50 flex-wrap">
             <TabButton
               active={tab === "pending"}
               onClick={() => setTab("pending")}
@@ -344,7 +403,44 @@ function AdminDashboard({ onLogout }) {
             >
               ✅ Ολοκληρωμένες ({counts.ready})
             </TabButton>
+            <TabButton
+              active={tab === "history"}
+              onClick={() => setTab("history")}
+            >
+              📚 Ιστορικό ({counts.history})
+            </TabButton>
           </div>
+
+          {/* Bulk toolbar στο Ιστορικό */}
+          {isHistory && requests.length > 0 && (
+            <div className="mb-4 flex items-center justify-between gap-3 flex-wrap px-3 py-2.5 bg-slate-800/40 border border-slate-700/40 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="w-4 h-4 accent-cyan-500 cursor-pointer"
+                />
+                <span>
+                  {allSelected
+                    ? "Απεπιλογή όλων"
+                    : "Επιλογή όλων"}
+                </span>
+                <span className="text-slate-400">
+                  ({selectedIds.size} επιλεγμένες)
+                </span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setBulkDeleteOpen(true)}
+                disabled={selectedIds.size === 0}
+                className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                🗑 Διαγραφή επιλεγμένων
+              </button>
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center text-slate-400 py-12">Φόρτωση...</div>
@@ -356,7 +452,9 @@ function AdminDashboard({ onLogout }) {
             <div className="text-center text-slate-400 py-12">
               {tab === "pending"
                 ? "Καμία εκκρεμής αίτηση."
-                : "Καμία ολοκληρωμένη αίτηση."}
+                : tab === "ready"
+                  ? "Καμία ολοκληρωμένη αίτηση."
+                  : "Το Ιστορικό είναι άδειο."}
             </div>
           ) : (
             <div className="space-y-3">
@@ -366,6 +464,10 @@ function AdminDashboard({ onLogout }) {
                   request={r}
                   onApprove={() => setApproveTarget(r)}
                   onDelete={() => setDeleteTarget(r)}
+                  showCheckbox={isHistory}
+                  checked={selectedIds.has(r.id)}
+                  onToggleCheck={() => toggleOne(r.id)}
+                  hideActions={isHistory}
                 />
               ))}
             </div>
@@ -373,8 +475,8 @@ function AdminDashboard({ onLogout }) {
         </div>
 
         <footer className="px-6 py-4 text-center text-xs text-slate-500">
-          SMAct Admin · {counts.pending + counts.ready} συνολικές αιτήσεις ·
-          Αυτόματη διαγραφή μετά από 30 μέρες
+          SMAct Admin · Ιστορικό {counts.history} αιτήσεις · Auto-cleanup 30
+          ημερών
         </footer>
       </main>
 
@@ -400,6 +502,14 @@ function AdminDashboard({ onLogout }) {
           onConfirm={handleCleanupConfirm}
         />
       )}
+
+      {bulkDeleteOpen && (
+        <BulkDeleteModal
+          count={selectedIds.size}
+          onClose={() => setBulkDeleteOpen(false)}
+          onConfirm={handleBulkDeleteConfirm}
+        />
+      )}
     </>
   );
 }
@@ -420,7 +530,15 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-function RequestCard({ request, onApprove, onDelete }) {
+function RequestCard({
+  request,
+  onApprove,
+  onDelete,
+  showCheckbox,
+  checked,
+  onToggleCheck,
+  hideActions,
+}) {
   const [copied, setCopied] = useState(false);
 
   const submittedAt = new Date(request.submittedAt).toLocaleString("el-GR");
@@ -440,101 +558,116 @@ function RequestCard({ request, onApprove, onDelete }) {
 
   return (
     <div
-      className={`bg-slate-800/60 backdrop-blur-sm border rounded-xl p-4 md:p-5 ${
+      className={`bg-slate-800/60 backdrop-blur-sm border rounded-xl p-4 md:p-5 flex gap-3 ${
         isReady ? "border-emerald-500/30" : "border-amber-500/30"
-      }`}
+      } ${checked ? "ring-2 ring-cyan-500/40" : ""}`}
     >
-      <div className="flex items-center justify-between mb-3">
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
-            isReady
-              ? "bg-emerald-500/20 text-emerald-200"
-              : "bg-amber-500/20 text-amber-200"
-          }`}
-        >
-          {isReady ? "✅ Ολοκληρωμένη" : "⏳ Εκκρεμής"}
-        </span>
-        <div className="text-xs text-slate-400 text-right">
-          <div>Υποβλήθηκε: {submittedAt}</div>
-          {readyAt && <div>Ετοιμάστηκε: {readyAt}</div>}
+      {showCheckbox && (
+        <div className="flex-shrink-0 pt-1">
+          <input
+            type="checkbox"
+            checked={!!checked}
+            onChange={onToggleCheck}
+            className="w-5 h-5 accent-cyan-500 cursor-pointer"
+          />
         </div>
-      </div>
+      )}
 
-      <div className="mb-3">
-        <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
-          Machine ID
-        </div>
-        <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
-          <code className="flex-1 text-cyan-100 font-mono text-sm break-all">
-            {request.machineId}
-          </code>
-          <button
-            type="button"
-            onClick={handleCopyMachineId}
-            title="Αντιγραφή για να το βάλεις στο SM Key Signer"
-            className="shrink-0 px-3 py-1.5 rounded-md bg-slate-700/70 hover:bg-slate-700 text-slate-100 text-xs font-semibold transition-colors flex items-center gap-1"
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
+              isReady
+                ? "bg-emerald-500/20 text-emerald-200"
+                : "bg-amber-500/20 text-amber-200"
+            }`}
           >
-            {copied ? (
-              <>
-                <span>✓</span>
-                <span>OK</span>
-              </>
-            ) : (
-              <>
-                <span>📋</span>
-                <span>Αντιγραφή</span>
-              </>
+            {isReady ? "✅ Ολοκληρωμένη" : "⏳ Εκκρεμής"}
+          </span>
+          <div className="text-xs text-slate-400 text-right">
+            <div>Υποβλήθηκε: {submittedAt}</div>
+            {readyAt && <div>Ετοιμάστηκε: {readyAt}</div>}
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
+            Machine ID
+          </div>
+          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+            <code className="flex-1 text-cyan-100 font-mono text-sm break-all">
+              {request.machineId}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopyMachineId}
+              title="Αντιγραφή για να το βάλεις στο SM Key Signer"
+              className="shrink-0 px-3 py-1.5 rounded-md bg-slate-700/70 hover:bg-slate-700 text-slate-100 text-xs font-semibold transition-colors flex items-center gap-1"
+            >
+              {copied ? (
+                <>
+                  <span>✓</span>
+                  <span>OK</span>
+                </>
+              ) : (
+                <>
+                  <span>📋</span>
+                  <span>Αντιγραφή</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
+              Pickup Code
+            </div>
+            <div className="text-slate-200 font-mono text-sm">
+              {request.pickupCode}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
+              Μονάδα
+            </div>
+            <div className="text-slate-200 text-sm">
+              {request.unit || <span className="text-slate-600">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
+              Γραφείο
+            </div>
+            <div className="text-slate-200 text-sm">
+              {request.office || <span className="text-slate-600">—</span>}
+            </div>
+          </div>
+        </div>
+
+        {!hideActions && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            {!isReady && (
+              <button
+                type="button"
+                onClick={onApprove}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white font-semibold text-sm shadow hover:scale-[1.01] active:scale-[0.99] transition-all"
+              >
+                ✓ Έγκριση
+              </button>
             )}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
-            Pickup Code
+            <button
+              type="button"
+              onClick={onDelete}
+              className={`${
+                isReady ? "flex-1" : ""
+              } px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-semibold text-sm transition-colors`}
+            >
+              🗑 Διαγραφή
+            </button>
           </div>
-          <div className="text-slate-200 font-mono text-sm">
-            {request.pickupCode}
-          </div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
-            Μονάδα
-          </div>
-          <div className="text-slate-200 text-sm">
-            {request.unit || <span className="text-slate-600">—</span>}
-          </div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
-            Γραφείο
-          </div>
-          <div className="text-slate-200 text-sm">
-            {request.office || <span className="text-slate-600">—</span>}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-2">
-        {!isReady && (
-          <button
-            type="button"
-            onClick={onApprove}
-            className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white font-semibold text-sm shadow hover:scale-[1.01] active:scale-[0.99] transition-all"
-          >
-            ✓ Έγκριση
-          </button>
         )}
-        <button
-          type="button"
-          onClick={onDelete}
-          className={`${
-            isReady ? "flex-1" : ""
-          } px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-semibold text-sm transition-colors`}
-        >
-          🗑 Διαγραφή
-        </button>
       </div>
     </div>
   );
@@ -731,6 +864,54 @@ function DeleteModal({ request, onClose, onConfirm }) {
   );
 }
 
+function BulkDeleteModal({ count, onClose, onConfirm }) {
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    await onConfirm();
+    setSubmitting(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-slate-800 border border-red-500/40 rounded-2xl p-6 shadow-2xl">
+        <div className="flex justify-center mb-4">
+          <div className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-400/60 flex items-center justify-center">
+            <span className="text-2xl">🗑</span>
+          </div>
+        </div>
+
+        <h2 className="text-xl font-bold text-white text-center mb-2">
+          Διαγραφή {count} αιτήσεων από το Ιστορικό;
+        </h2>
+        <p className="text-red-300 text-center text-xs mb-6">
+          Δεν μπορεί να αναιρεθεί!
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-white font-semibold text-sm transition-colors"
+          >
+            Άκυρο
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm disabled:opacity-50 transition-all"
+          >
+            {submitting ? "Διαγραφή..." : "Διαγραφή"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CleanupModal({ onClose, onConfirm }) {
   const [submitting, setSubmitting] = useState(false);
 
@@ -753,14 +934,14 @@ function CleanupModal({ onClose, onConfirm }) {
           Καθαρισμός Παλιών Αιτήσεων;
         </h2>
         <p className="text-slate-300 text-center text-sm mb-4">
-          Θα διαγραφούν{" "}
-          <span className="text-cyan-200 font-semibold">όλες</span> οι αιτήσεις
-          με ημερομηνία υποβολής παλαιότερη των{" "}
-          <span className="text-cyan-200 font-semibold">30 ημερών</span>.
+          Εκκρεμείς παλαιότερες των 30 ημερών θα{" "}
+          <span className="text-red-300 font-semibold">διαγραφούν</span>.
+          Ολοκληρωμένες παλαιότερες των 30 ημερών θα{" "}
+          <span className="text-cyan-200 font-semibold">αποσυρθούν</span> από
+          το tab «Ολοκληρωμένες» (παραμένουν στο Ιστορικό).
         </p>
         <p className="text-slate-400 text-center text-xs mb-6">
-          Αυτό γίνεται αυτόματα κάθε μέρα στις 06:00 (Ελληνική ώρα). Εδώ
-          μπορείς να το τρέξεις άμεσα.
+          Αυτό γίνεται αυτόματα κάθε μέρα στις 06:00 (Ελληνική ώρα).
         </p>
 
         <div className="flex gap-3">
