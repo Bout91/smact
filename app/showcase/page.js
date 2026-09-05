@@ -236,7 +236,8 @@ export default function ShowcasePage() {
 
   useEffect(() => {
     let mounted = true;
-    fetch("/api/features")
+    // Φάση 9 fix: cache: "no-store" ώστε ο browser να ζητά πάντα φρέσκα δεδομένα
+    fetch("/api/features", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (!mounted) return;

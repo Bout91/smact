@@ -3,11 +3,17 @@
 // Επιστρέφει όλες τις περιγραφές των υποκαρτελών σε key/value map.
 //
 // Response: { features: { "office1::protocol": "<p>...</p>", ... }, updatedAt: {...} }
+//
+// Φάση 9 fix: force-dynamic + no-store headers ώστε να μη γίνεται
+// cache από Next.js/Netlify/browser. Οι αλλαγές του admin πρέπει
+// να φαίνονται αμέσως στους επισκέπτες.
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -27,7 +33,15 @@ export async function GET() {
         r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at;
     }
 
-    return Response.json({ features, updatedAt });
+    return new Response(JSON.stringify({ features, updatedAt }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "CDN-Cache-Control": "no-store",
+        "Netlify-CDN-Cache-Control": "no-store",
+      },
+    });
   } catch (err) {
     console.error("[SMAct] Features list error:", err);
     return Response.json(
