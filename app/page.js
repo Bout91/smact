@@ -117,32 +117,47 @@ function MainScreen() {
             Καλωσορίσατε στο <span className="gradient-text">SMAct</span>
           </h1>
           <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-xl mx-auto mb-12">
-            Υπηρεσία ενεργοποίησης του Service Manager Pro. Υπόβαλλε αίτηση για
-            κωδικό ή αναζήτησε αίτηση που έχεις ήδη κάνει.
+            Υπηρεσία ενεργοποίησης του Service Manager Pro. Δες τι προσφέρει το
+            πρόγραμμα, υπόβαλλε αίτηση για κωδικό ή αναζήτησε αίτηση που έχεις
+            ήδη κάνει.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-stretch">
+          <div className="flex flex-col gap-4 items-center">
+            {/* Φάση 9: Νέο κουμπί ΠΑΝΩ από τα άλλα δύο — μοβ/indigo gradient */}
             <button
               type="button"
-              onClick={() => router.push("/request")}
-              className="group relative px-8 py-5 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-base shadow-lg shadow-blue-900/50 hover:shadow-xl hover:shadow-blue-900/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
+              onClick={() => router.push("/showcase")}
+              className="group relative w-full sm:w-auto px-8 py-5 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-600 text-white font-semibold text-base shadow-lg shadow-purple-900/60 hover:shadow-xl hover:shadow-purple-900/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 sm:min-w-[540px]"
             >
               <span className="flex items-center justify-center gap-3">
-                <span className="text-2xl">🔑</span>
-                <span>Αίτημα Κωδικού Ενεργοποίησης</span>
+                <span className="text-2xl">✨</span>
+                <span>Τί προσφέρει το Service Manager Pro</span>
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => router.push("/search")}
-              className="group relative px-8 py-5 rounded-2xl bg-slate-800/60 backdrop-blur-sm border-2 border-cyan-500/40 text-cyan-100 font-semibold text-base hover:bg-slate-800/80 hover:border-cyan-400/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
-            >
-              <span className="flex items-center justify-center gap-3">
-                <span className="text-2xl">🔍</span>
-                <span>Αναζήτηση Αίτησης</span>
-              </span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-stretch">
+              <button
+                type="button"
+                onClick={() => router.push("/request")}
+                className="group relative px-8 py-5 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-base shadow-lg shadow-blue-900/50 hover:shadow-xl hover:shadow-blue-900/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
+              >
+                <span className="flex items-center justify-center gap-3">
+                  <span className="text-2xl">🔑</span>
+                  <span>Αίτημα Κωδικού Ενεργοποίησης</span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push("/search")}
+                className="group relative px-8 py-5 rounded-2xl bg-slate-800/60 backdrop-blur-sm border-2 border-cyan-500/40 text-cyan-100 font-semibold text-base hover:bg-slate-800/80 hover:border-cyan-400/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
+              >
+                <span className="flex items-center justify-center gap-3">
+                  <span className="text-2xl">🔍</span>
+                  <span>Αναζήτηση Αίτησης</span>
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

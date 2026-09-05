@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { MENU_STRUCTURE, featureKey } from "../lib/menu-structure";
 
 async function checkAuth() {
   try {
@@ -176,6 +177,11 @@ function AdminDashboard({ onLogout }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const loadRequests = useCallback(async () => {
+    // Στο showcase tab δεν φορτώνουμε αιτήσεις
+    if (tab === "showcase") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setErrorMsg("");
     setSelectedIds(new Set());
@@ -410,67 +416,79 @@ function AdminDashboard({ onLogout }) {
             >
               📚 Ιστορικό ({counts.history})
             </TabButton>
+            <TabButton
+              active={tab === "showcase"}
+              onClick={() => setTab("showcase")}
+            >
+              📋 Ξενάγηση
+            </TabButton>
           </div>
 
-          {isHistory && requests.length > 0 && (
-            <div className="mb-4 flex items-center justify-between gap-3 flex-wrap px-3 py-2.5 bg-slate-800/40 border border-slate-700/40 rounded-lg">
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 select-none">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                  className="w-4 h-4 accent-cyan-500 cursor-pointer"
-                />
-                <span>
-                  {allSelected ? "Απεπιλογή όλων" : "Επιλογή όλων"}
-                </span>
-                <span className="text-slate-400">
-                  ({selectedIds.size} επιλεγμένες)
-                </span>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setBulkDeleteOpen(true)}
-                disabled={selectedIds.size === 0}
-                className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                🗑 Διαγραφή επιλεγμένων
-              </button>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center text-slate-400 py-12">Φόρτωση...</div>
-          ) : errorMsg ? (
-            <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-200 text-sm">
-              {errorMsg}
-            </div>
-          ) : requests.length === 0 ? (
-            <div className="text-center text-slate-400 py-12">
-              {tab === "pending"
-                ? "Καμία εκκρεμής αίτηση."
-                : tab === "ready"
-                  ? "Καμία ολοκληρωμένη αίτηση."
-                  : "Το Ιστορικό είναι άδειο."}
-            </div>
+          {tab === "showcase" ? (
+            <ShowcaseAdminPanel onUnauthorized={onLogout} />
           ) : (
-            <div className="space-y-3">
-              {requests.map((r) => (
-                <RequestCard
-                  key={r.id}
-                  request={r}
-                  onApproveMachine={(machine) =>
-                    setApproveTarget({ request: r, machine })
-                  }
-                  onDelete={() => setDeleteTarget(r)}
-                  showCheckbox={isHistory}
-                  checked={selectedIds.has(r.id)}
-                  onToggleCheck={() => toggleOne(r.id)}
-                  hideActions={isHistory}
-                />
-              ))}
-            </div>
+            <>
+              {isHistory && requests.length > 0 && (
+                <div className="mb-4 flex items-center justify-between gap-3 flex-wrap px-3 py-2.5 bg-slate-800/40 border border-slate-700/40 rounded-lg">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 select-none">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="w-4 h-4 accent-cyan-500 cursor-pointer"
+                    />
+                    <span>
+                      {allSelected ? "Απεπιλογή όλων" : "Επιλογή όλων"}
+                    </span>
+                    <span className="text-slate-400">
+                      ({selectedIds.size} επιλεγμένες)
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    disabled={selectedIds.size === 0}
+                    className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    🗑 Διαγραφή επιλεγμένων
+                  </button>
+                </div>
+              )}
+
+              {loading ? (
+                <div className="text-center text-slate-400 py-12">Φόρτωση...</div>
+              ) : errorMsg ? (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-200 text-sm">
+                  {errorMsg}
+                </div>
+              ) : requests.length === 0 ? (
+                <div className="text-center text-slate-400 py-12">
+                  {tab === "pending"
+                    ? "Καμία εκκρεμής αίτηση."
+                    : tab === "ready"
+                      ? "Καμία ολοκληρωμένη αίτηση."
+                      : "Το Ιστορικό είναι άδειο."}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {requests.map((r) => (
+                    <RequestCard
+                      key={r.id}
+                      request={r}
+                      onApproveMachine={(machine) =>
+                        setApproveTarget({ request: r, machine })
+                      }
+                      onDelete={() => setDeleteTarget(r)}
+                      showCheckbox={isHistory}
+                      checked={selectedIds.has(r.id)}
+                      onToggleCheck={() => toggleOne(r.id)}
+                      hideActions={isHistory}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -1063,6 +1081,442 @@ function CleanupModal({ onClose, onConfirm }) {
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────
+// Φάση 9: Ξενάγηση Admin Panel
+// ─────────────────────────────────────────────────────────
+function ShowcaseAdminPanel({ onUnauthorized }) {
+  const [features, setFeatures] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [editTarget, setEditTarget] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const loadFeatures = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/features");
+      const data = await res.json();
+      setFeatures(data.features || {});
+    } catch {
+      setErrorMsg("Σφάλμα κατά τη φόρτωση.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeatures();
+  }, [loadFeatures]);
+
+  async function handleSave(mainTabId, subTabId, descriptionHtml) {
+    const res = await fetch("/api/admin/features/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mainTabId, subTabId, descriptionHtml }),
+      credentials: "include",
+    });
+    if (res.status === 401) {
+      onUnauthorized();
+      return { ok: false };
+    }
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error };
+    // Update local state με το sanitized HTML που γύρισε ο server
+    setFeatures((prev) => ({
+      ...prev,
+      [featureKey(mainTabId, subTabId)]: data.sanitizedHtml || "",
+    }));
+    return { ok: true };
+  }
+
+  const totalSubItems = MENU_STRUCTURE.reduce(
+    (acc, m) => acc + m.subItems.length,
+    0
+  );
+  const filledCount = Object.values(features).filter(
+    (v) => v && v.trim().length > 0
+  ).length;
+
+  return (
+    <>
+      <div className="mb-4 px-3 py-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg flex items-center justify-between flex-wrap gap-2">
+        <div className="text-sm text-indigo-100">
+          <span className="font-semibold">
+            {filledCount} / {totalSubItems}
+          </span>{" "}
+          υποκαρτέλες έχουν περιγραφή. Πάτα σε μία για να την επεξεργαστείς.
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center text-slate-400 py-12">Φόρτωση...</div>
+      ) : errorMsg ? (
+        <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-200 text-sm">
+          {errorMsg}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {MENU_STRUCTURE.map((main) => (
+            <MainTabSection
+              key={main.id}
+              main={main}
+              features={features}
+              onEdit={(sub) => setEditTarget({ main, sub })}
+            />
+          ))}
+        </div>
+      )}
+
+      {editTarget && (
+        <FeatureEditorModal
+          main={editTarget.main}
+          sub={editTarget.sub}
+          initialHtml={
+            features[featureKey(editTarget.main.id, editTarget.sub.id)] || ""
+          }
+          onClose={() => setEditTarget(null)}
+          onSave={async (html) => {
+            const result = await handleSave(
+              editTarget.main.id,
+              editTarget.sub.id,
+              html
+            );
+            if (result.ok) setEditTarget(null);
+            return result;
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function MainTabSection({ main, features, onEdit }) {
+  const [expanded, setExpanded] = useState(false);
+  const filled = main.subItems.filter(
+    (s) => (features[featureKey(main.id, s.id)] || "").trim().length > 0
+  ).length;
+
+  return (
+    <div className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-700/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-white font-semibold text-sm uppercase tracking-wider">
+            {main.label}
+          </span>
+          <span className="text-xs px-2 py-0.5 rounded-md bg-slate-900/60 text-slate-300 font-mono">
+            {filled} / {main.subItems.length}
+          </span>
+        </div>
+        <span
+          className={`text-slate-400 transition-transform ${
+            expanded ? "rotate-180" : ""
+          }`}
+        >
+          ▼
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-slate-700/50 p-3 space-y-2">
+          {main.subItems.map((sub) => {
+            const html = features[featureKey(main.id, sub.id)] || "";
+            const hasContent = html.trim().length > 0;
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => onEdit(sub)}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-slate-900/40 hover:bg-slate-900/70 border border-slate-700/40 hover:border-cyan-500/40 text-left transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                      hasContent ? "bg-emerald-400" : "bg-slate-600"
+                    }`}
+                  />
+                  <span className="text-slate-200 text-sm truncate">
+                    {sub.label}
+                  </span>
+                </div>
+                <span className="text-xs text-cyan-300 font-semibold flex-shrink-0">
+                  {hasContent ? "Επεξεργασία" : "+ Προσθήκη"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeatureEditorModal({ main, sub, initialHtml, onClose, onSave }) {
+  const editorRef = useRef(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    // Set initial HTML στο mount ΜΟΝΟ (uncontrolled editor)
+    if (editorRef.current) {
+      editorRef.current.innerHTML = initialHtml || "";
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function exec(command, value = null) {
+    editorRef.current?.focus();
+    try {
+      document.execCommand(command, false, value);
+    } catch {}
+  }
+
+  function handleLink() {
+    const url = window.prompt("Δώσε URL (πρέπει να ξεκινά με http:// ή https://):");
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      alert("Λάθος URL — πρέπει να ξεκινά με http:// ή https://");
+      return;
+    }
+    exec("createLink", url);
+  }
+
+  function handleUnlink() {
+    exec("unlink");
+  }
+
+  function handleHeading(tag) {
+    // formatBlock παίρνει "H2", "H3", "P"
+    exec("formatBlock", tag);
+  }
+
+  function handleClear() {
+    if (!window.confirm("Καθαρισμός όλης της περιγραφής;")) return;
+    if (editorRef.current) editorRef.current.innerHTML = "";
+  }
+
+  async function handleSubmit() {
+    if (!editorRef.current) return;
+    const html = editorRef.current.innerHTML;
+    setSubmitting(true);
+    setErrorMsg("");
+    const result = await onSave(html);
+    setSubmitting(false);
+    if (!result.ok) {
+      setErrorMsg(result.error || "Σφάλμα κατά την αποθήκευση.");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-3xl bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
+          <div className="min-w-0">
+            <div className="text-xs uppercase tracking-widest text-indigo-300 mb-0.5 truncate">
+              {main.label}
+            </div>
+            <h2 className="text-xl font-bold text-white truncate">
+              {sub.label}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-2xl leading-none flex-shrink-0 ml-2"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-700 flex-wrap flex-shrink-0">
+          <ToolbarButton onClick={() => exec("bold")} title="Έντονα (Ctrl+B)">
+            <b>B</b>
+          </ToolbarButton>
+          <ToolbarButton onClick={() => exec("italic")} title="Πλάγια (Ctrl+I)">
+            <i>I</i>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => exec("underline")}
+            title="Υπογράμμιση (Ctrl+U)"
+          >
+            <u>U</u>
+          </ToolbarButton>
+          <ToolbarDivider />
+          <ToolbarButton
+            onClick={() => handleHeading("H2")}
+            title="Μεγάλος τίτλος"
+          >
+            H2
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => handleHeading("H3")}
+            title="Μικρός τίτλος"
+          >
+            H3
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => handleHeading("P")}
+            title="Κανονική παράγραφος"
+          >
+            P
+          </ToolbarButton>
+          <ToolbarDivider />
+          <ToolbarButton
+            onClick={() => exec("insertUnorderedList")}
+            title="Λίστα με κουκκίδες"
+          >
+            • Λίστα
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => exec("insertOrderedList")}
+            title="Αριθμημένη λίστα"
+          >
+            1. Λίστα
+          </ToolbarButton>
+          <ToolbarDivider />
+          <ToolbarButton onClick={handleLink} title="Προσθήκη link">
+            🔗 Link
+          </ToolbarButton>
+          <ToolbarButton onClick={handleUnlink} title="Αφαίρεση link">
+            🔗✕
+          </ToolbarButton>
+          <ToolbarDivider />
+          <ToolbarButton onClick={() => exec("undo")} title="Αναίρεση (Ctrl+Z)">
+            ↶
+          </ToolbarButton>
+          <ToolbarButton onClick={() => exec("redo")} title="Επανάληψη (Ctrl+Y)">
+            ↷
+          </ToolbarButton>
+          <div className="flex-1" />
+          <ToolbarButton
+            onClick={handleClear}
+            title="Καθαρισμός όλου του κειμένου"
+            variant="danger"
+          >
+            🗑
+          </ToolbarButton>
+        </div>
+
+        {/* Editor */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            className="admin-editor min-h-[280px] bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 text-base leading-relaxed focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+            style={{ whiteSpace: "pre-wrap" }}
+          />
+          <p className="text-xs text-slate-500 mt-2">
+            Tip: Γράψε ελεύθερα κείμενο. Χρησιμοποίησε την γραμμή εργαλείων για
+            μορφοποίηση. Επιτρέπονται: έντονα, πλάγια, υπογράμμιση, τίτλοι,
+            λίστες, links.
+          </p>
+        </div>
+
+        {errorMsg && (
+          <div className="mx-4 mb-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <p className="text-sm text-red-200">{errorMsg}</p>
+          </div>
+        )}
+
+        {/* Footer buttons */}
+        <div className="flex gap-3 px-4 py-3 border-t border-slate-700 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-white font-semibold text-sm transition-colors"
+          >
+            Άκυρο
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            {submitting ? "Αποθήκευση..." : "💾 Αποθήκευση"}
+          </button>
+        </div>
+
+        <style jsx global>{`
+          .admin-editor h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 1rem 0 0.5rem;
+          }
+          .admin-editor h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0.75rem 0 0.4rem;
+          }
+          .admin-editor p {
+            margin: 0.5rem 0;
+          }
+          .admin-editor ul,
+          .admin-editor ol {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+          }
+          .admin-editor ul {
+            list-style: disc;
+          }
+          .admin-editor ol {
+            list-style: decimal;
+          }
+          .admin-editor li {
+            margin: 0.25rem 0;
+          }
+          .admin-editor a {
+            color: #67e8f9;
+            text-decoration: underline;
+          }
+          .admin-editor strong,
+          .admin-editor b {
+            font-weight: 700;
+          }
+          .admin-editor em,
+          .admin-editor i {
+            font-style: italic;
+          }
+          .admin-editor u {
+            text-decoration: underline;
+          }
+        `}</style>
+      </div>
+    </div>
+  );
+}
+
+function ToolbarButton({ children, onClick, title, variant }) {
+  const variants = {
+    default:
+      "bg-slate-700/40 hover:bg-slate-700 text-slate-100 border-slate-600",
+    danger:
+      "bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/30",
+  };
+  const style = variants[variant] || variants.default;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-colors ${style}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <div className="w-px h-6 bg-slate-700 mx-1" />;
 }
 
 function Background() {
