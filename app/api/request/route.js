@@ -1,9 +1,6 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/request — Υποβολή νέας αίτησης κωδικού
-//
-// Φάση 7 additions:
-//   • Cloudflare Turnstile verification (captcha)
-//   • Rate limiting: max 10 αιτήσεις/λεπτό ανά IP
+// POST /api/request — Υποβολή νέας αίτησης
+// Φάση 8: Δέχεται array από machine-ids (1-15)
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -11,64 +8,32 @@ import { neon } from "@neondatabase/serverless";
 export const runtime = "nodejs";
 
 const sql = neon(process.env.DATABASE_URL);
-
 const ADMIN_URL = "https://smact.netlify.app/admin";
-const RATE_LIMIT_MAX = 10; // αιτήσεις/λεπτό
-const RATE_LIMIT_WINDOW_SECONDS = 60;
+const RATE_LIMIT_MAX = 10;
+const MAX_MACHINE_IDS = 15;
 
-// ─────────────────────────────────────────────────────────
-// Turnstile verification
-// ─────────────────────────────────────────────────────────
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) {
-    console.warn(
-      "[SMAct] TURNSTILE_SECRET_KEY not set — παρακάμπτω verification"
-    );
-    return { ok: true };
-  }
-  if (!token) {
-    return { ok: false, error: "Λείπει ο έλεγχος ασφαλείας (captcha)." };
-  }
-
+  if (!secret) return { ok: true };
+  if (!token) return { ok: false, error: "Λείπει ο έλεγχος ασφαλείας (captcha)." };
   try {
     const params = new URLSearchParams();
     params.append("secret", secret);
     params.append("response", token);
     if (ip) params.append("remoteip", ip);
-
     const response = await fetch(
       "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-      {
-        method: "POST",
-        body: params,
-      }
+      { method: "POST", body: params }
     );
-
     const data = await response.json();
-
-    if (data.success === true) {
-      return { ok: true };
-    }
-    console.warn("[SMAct] Turnstile verification failed:", data);
-    return {
-      ok: false,
-      error: "Ο έλεγχος ασφαλείας απέτυχε. Ανανέωσε τη σελίδα και δοκίμασε ξανά.",
-    };
-  } catch (err) {
-    console.error("[SMAct] Turnstile verify error:", err);
-    return {
-      ok: false,
-      error: "Αδυναμία επαλήθευσης ασφαλείας. Δοκίμασε ξανά σε λίγο.",
-    };
+    if (data.success === true) return { ok: true };
+    return { ok: false, error: "Ο έλεγχος ασφαλείας απέτυχε. Ανανέωσε τη σελίδα και δοκίμασε ξανά." };
+  } catch {
+    return { ok: false, error: "Αδυναμία επαλήθευσης ασφαλείας." };
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// Rate limiting — μέτρημα hits ανά IP στο τελευταίο λεπτό
-// ─────────────────────────────────────────────────────────
 function getClientIp(request) {
-  // Netlify προσθέτει x-nf-client-connection-ip, standard είναι x-forwarded-for
   const nfIp = request.headers.get("x-nf-client-connection-ip");
   if (nfIp) return nfIp.trim();
   const forwarded = request.headers.get("x-forwarded-for");
@@ -78,62 +43,42 @@ function getClientIp(request) {
 
 async function checkAndRecordRateLimit(ip) {
   try {
-    // Καθαρισμός παλαιών εγγραφών (ancient hits >10 λεπτών)
-    // Το κάνουμε καιρικά όταν κάποιος υποβάλλει — cheap.
-    await sql`
-      DELETE FROM rate_limit_hits
-      WHERE hit_at < NOW() - INTERVAL '10 minutes'
-    `;
-
-    // Μέτρα hits του IP στα τελευταία 60 δευτ.
+    await sql`DELETE FROM rate_limit_hits WHERE hit_at < NOW() - INTERVAL '10 minutes'`;
     const rows = await sql`
-      SELECT COUNT(*)::int AS cnt
-      FROM rate_limit_hits
-      WHERE ip = ${ip}
-        AND hit_at > NOW() - INTERVAL '1 minute'
+      SELECT COUNT(*)::int AS cnt FROM rate_limit_hits
+      WHERE ip = ${ip} AND hit_at > NOW() - INTERVAL '1 minute'
     `;
-    const cnt = rows[0].cnt;
-
-    if (cnt >= RATE_LIMIT_MAX) {
-      return {
-        ok: false,
-        error:
-          "Πολλές αιτήσεις σε σύντομο χρονικό διάστημα. Δοκίμασε ξανά σε 1 λεπτό.",
-      };
+    if (rows[0].cnt >= RATE_LIMIT_MAX) {
+      return { ok: false, error: "Πολλές αιτήσεις σε σύντομο χρονικό διάστημα. Δοκίμασε ξανά σε 1 λεπτό." };
     }
-
-    // Καταγραφή του νέου hit
     await sql`INSERT INTO rate_limit_hits (ip) VALUES (${ip})`;
-
     return { ok: true };
   } catch (err) {
     console.error("[SMAct] Rate limit check error:", err);
-    // Αν πέσει η DB για το rate limit, μη μπλοκάρουμε τους νόμιμους χρήστες
     return { ok: true };
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// Push notification στο κινητό (fire-and-forget)
-// ─────────────────────────────────────────────────────────
-async function sendAdminNotification({ pickupCode, unit, office }) {
+async function sendAdminNotification({ pickupCode, unit, office, machineCount }) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) return;
-
   try {
-    const lines = [`Pickup Code: ${pickupCode}`];
+    const lines = [
+      `Pickup Code: ${pickupCode}`,
+      `Machine-IDs: ${machineCount}`,
+    ];
     if (unit) lines.push(`Μονάδα: ${unit}`);
     if (office) lines.push(`Γραφείο: ${office}`);
-
     const payload = {
       topic,
-      title: "🔔 SMAct: Νέα αίτηση",
+      title: machineCount > 1
+        ? `🔔 SMAct: Νέα αίτηση (${machineCount} μηχανές)`
+        : "🔔 SMAct: Νέα αίτηση",
       message: lines.join("\n"),
-      priority: 2, // low
+      priority: 2,
       tags: ["key"],
       click: ADMIN_URL,
     };
-
     await fetch("https://ntfy.sh/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -144,45 +89,48 @@ async function sendAdminNotification({ pickupCode, unit, office }) {
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// Main POST handler
-// ─────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
     const ip = getClientIp(request);
 
-    // 1) Rate limiting
-    const rateCheck = await checkAndRecordRateLimit(ip);
-    if (!rateCheck.ok) {
-      return Response.json(
-        { success: false, error: rateCheck.error },
-        { status: 429 }
-      );
-    }
+    // Rate limit
+    const rate = await checkAndRecordRateLimit(ip);
+    if (!rate.ok) return Response.json({ success: false, error: rate.error }, { status: 429 });
 
     const body = await request.json();
 
-    // 2) Turnstile verification
+    // Captcha
     const captcha = await verifyTurnstile(body.turnstileToken, ip);
-    if (!captcha.ok) {
+    if (!captcha.ok) return Response.json({ success: false, error: captcha.error }, { status: 400 });
+
+    // machineIds: array of strings — δεχόμαστε είτε array είτε (για backward compat) single string
+    let machineIds = [];
+    if (Array.isArray(body.machineIds)) {
+      machineIds = body.machineIds
+        .map((x) => String(x || "").trim())
+        .filter((x) => x.length > 0);
+    } else if (body.machineId) {
+      const single = String(body.machineId).trim();
+      if (single) machineIds = [single];
+    }
+
+    // Dedupe (case-sensitive)
+    machineIds = Array.from(new Set(machineIds));
+
+    if (machineIds.length === 0) {
       return Response.json(
-        { success: false, error: captcha.error },
+        { success: false, error: "Πρέπει να συμπληρώσεις τουλάχιστον 1 Machine-id." },
+        { status: 400 }
+      );
+    }
+    if (machineIds.length > MAX_MACHINE_IDS) {
+      return Response.json(
+        { success: false, error: `Μέγιστο ${MAX_MACHINE_IDS} Machine-ids ανά αίτηση.` },
         { status: 400 }
       );
     }
 
-    // 3) Πεδία
-    const machineId = String(body.machineId || "").trim();
     const pickupCode = String(body.pickupCode || "").trim();
-    const unit = String(body.unit || "").trim() || null;
-    const office = String(body.office || "").trim() || null;
-
-    if (!machineId) {
-      return Response.json(
-        { success: false, error: "Το machineId είναι υποχρεωτικό." },
-        { status: 400 }
-      );
-    }
     if (!pickupCode) {
       return Response.json(
         { success: false, error: "Το pickupCode είναι υποχρεωτικό." },
@@ -190,49 +138,57 @@ export async function POST(request) {
       );
     }
 
-    // 4) Duplicate pickup code check
+    const unit = String(body.unit || "").trim() || null;
+    const office = String(body.office || "").trim() || null;
+
+    // Duplicate pickup code
     const existing = await sql`
       SELECT id FROM requests WHERE pickup_code = ${pickupCode} LIMIT 1
     `;
     if (existing.length > 0) {
       return Response.json(
-        {
-          success: false,
-          error:
-            "Αυτό το Pickup Code χρησιμοποιείται ήδη. Διάλεξε άλλο (πάτα το 🎲 για τυχαίο).",
-        },
+        { success: false, error: "Αυτό το Pickup Code χρησιμοποιείται ήδη. Διάλεξε άλλο (πάτα το 🎲 για τυχαίο)." },
         { status: 409 }
       );
     }
 
-    // 5) INSERT
-    const rows = await sql`
-      INSERT INTO requests (machine_id, pickup_code, unit, office)
-      VALUES (${machineId}, ${pickupCode}, ${unit}, ${office})
+    // INSERT request (χωρίς machine_id — μπαίνουν στο request_machines)
+    const reqRows = await sql`
+      INSERT INTO requests (pickup_code, unit, office)
+      VALUES (${pickupCode}, ${unit}, ${office})
       RETURNING id, submitted_at
     `;
-
-    const inserted = rows[0];
+    const requestId = reqRows[0].id;
     const submittedAt =
-      inserted.submitted_at instanceof Date
-        ? inserted.submitted_at.toISOString()
-        : inserted.submitted_at;
+      reqRows[0].submitted_at instanceof Date
+        ? reqRows[0].submitted_at.toISOString()
+        : reqRows[0].submitted_at;
+
+    // INSERT κάθε machine-id
+    for (let i = 0; i < machineIds.length; i++) {
+      await sql`
+        INSERT INTO request_machines (request_id, machine_id, position)
+        VALUES (${requestId}, ${machineIds[i]}, ${i})
+      `;
+    }
 
     console.log("[SMAct] New request saved:", {
-      id: inserted.id,
+      id: requestId,
       submittedAt,
       pickupCode,
+      machineCount: machineIds.length,
       unit: unit || "(none)",
       office: office || "(none)",
     });
 
-    // 6) Push notification στον διαχειριστή
-    await sendAdminNotification({ pickupCode, unit, office });
-
-    return Response.json({
-      success: true,
-      submittedAt,
+    await sendAdminNotification({
+      pickupCode,
+      unit,
+      office,
+      machineCount: machineIds.length,
     });
+
+    return Response.json({ success: true, submittedAt });
   } catch (err) {
     console.error("[SMAct] Request handler error:", err);
     return Response.json(

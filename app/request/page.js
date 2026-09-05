@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Script from "next/script";
 
-// Το Turnstile Site Key από τα Cloudflare
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 const PICKUP_CODE_CHARS =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 const PICKUP_CODE_LENGTH = 10;
+const MAX_MACHINE_IDS = 15;
 
 function generateRandomPickupCode() {
   const array = new Uint32Array(PICKUP_CODE_LENGTH);
@@ -25,7 +25,8 @@ function generateRandomPickupCode() {
 export default function RequestPage() {
   const router = useRouter();
 
-  const [machineId, setMachineId] = useState("");
+  // Array από machine-ids (ξεκινά με 1)
+  const [machineIds, setMachineIds] = useState([""]);
   const [pickupCode, setPickupCode] = useState("");
   const [unit, setUnit] = useState("");
   const [office, setOffice] = useState("");
@@ -35,12 +36,10 @@ export default function RequestPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
 
-  // Turnstile state
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstileRef = useRef(null);
   const turnstileWidgetIdRef = useRef(null);
 
-  // Render Turnstile widget όταν φορτώσει το Cloudflare script
   useEffect(() => {
     if (submitted) return;
     if (!TURNSTILE_SITE_KEY) return;
@@ -50,12 +49,11 @@ export default function RequestPage() {
     function tryRender() {
       if (cancelled) return;
       if (typeof window === "undefined" || !window.turnstile) {
-        // Το script δεν έχει φορτώσει ακόμα — δοκίμασε πάλι σε λίγο
         setTimeout(tryRender, 200);
         return;
       }
       if (!turnstileRef.current) return;
-      if (turnstileWidgetIdRef.current) return; // ήδη renderαρισμένο
+      if (turnstileWidgetIdRef.current) return;
 
       try {
         turnstileWidgetIdRef.current = window.turnstile.render(
@@ -101,12 +99,42 @@ export default function RequestPage() {
     }
   }
 
+  function handleMachineIdChange(index, value) {
+    const next = [...machineIds];
+    next[index] = value;
+    setMachineIds(next);
+  }
+
+  function handleAddMachineId() {
+    if (machineIds.length >= MAX_MACHINE_IDS) return;
+    setMachineIds([...machineIds, ""]);
+  }
+
+  function handleRemoveMachineId(index) {
+    if (machineIds.length === 1) {
+      // Δεν αδειάζουμε τελείως — απλά κάνουμε clear το μοναδικό
+      setMachineIds([""]);
+      return;
+    }
+    const next = machineIds.filter((_, i) => i !== index);
+    setMachineIds(next);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setErrorMsg("");
 
-    if (!machineId.trim()) {
-      setErrorMsg("Το πεδίο Machine-id είναι υποχρεωτικό.");
+    // Φιλτράρουμε άδεια πεδία & dedupe
+    const cleaned = Array.from(
+      new Set(machineIds.map((x) => x.trim()).filter((x) => x.length > 0))
+    );
+
+    if (cleaned.length === 0) {
+      setErrorMsg("Πρέπει να συμπληρώσεις τουλάχιστον 1 Machine-id.");
+      return;
+    }
+    if (cleaned.length > MAX_MACHINE_IDS) {
+      setErrorMsg(`Μέγιστο ${MAX_MACHINE_IDS} Machine-ids ανά αίτηση.`);
       return;
     }
     if (!pickupCode.trim()) {
@@ -126,7 +154,7 @@ export default function RequestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          machineId: machineId.trim(),
+          machineIds: cleaned,
           pickupCode: pickupCode.trim(),
           unit: unit.trim(),
           office: office.trim(),
@@ -140,7 +168,6 @@ export default function RequestPage() {
         setErrorMsg(
           data.error || "Σφάλμα κατά την υποβολή. Δοκίμασε ξανά σε λίγο."
         );
-        // Reset το captcha ώστε ο χρήστης να δοκιμάσει ξανά
         resetTurnstile();
         setSubmitting(false);
         return;
@@ -149,6 +176,7 @@ export default function RequestPage() {
       setSubmittedData({
         pickupCode: pickupCode.trim(),
         submittedAt: data.submittedAt,
+        machineCount: cleaned.length,
       });
       setSubmitted(true);
     } catch (err) {
@@ -160,7 +188,6 @@ export default function RequestPage() {
 
   return (
     <>
-      {/* Cloudflare Turnstile script */}
       {TURNSTILE_SITE_KEY && !submitted && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
@@ -207,12 +234,15 @@ export default function RequestPage() {
             {submitted ? (
               <SuccessCard
                 pickupCode={submittedData.pickupCode}
+                machineCount={submittedData.machineCount}
                 onBackHome={() => router.push("/")}
               />
             ) : (
               <FormCard
-                machineId={machineId}
-                setMachineId={setMachineId}
+                machineIds={machineIds}
+                onMachineIdChange={handleMachineIdChange}
+                onAddMachineId={handleAddMachineId}
+                onRemoveMachineId={handleRemoveMachineId}
                 pickupCode={pickupCode}
                 setPickupCode={setPickupCode}
                 unit={unit}
@@ -239,8 +269,10 @@ export default function RequestPage() {
 }
 
 function FormCard({
-  machineId,
-  setMachineId,
+  machineIds,
+  onMachineIdChange,
+  onAddMachineId,
+  onRemoveMachineId,
   pickupCode,
   setPickupCode,
   unit,
@@ -254,6 +286,8 @@ function FormCard({
   turnstileRef,
   hasSiteKey,
 }) {
+  const canAddMore = machineIds.length < MAX_MACHINE_IDS;
+
   return (
     <form
       onSubmit={onSubmit}
@@ -263,29 +297,68 @@ function FormCard({
         Αίτημα Κωδικού Ενεργοποίησης
       </h1>
       <p className="text-slate-400 text-sm mb-6">
-        Συμπλήρωσε τα παρακάτω πεδία για να υποβάλλεις αίτηση.
+        Συμπλήρωσε τα παρακάτω πεδία για να υποβάλλεις αίτηση. Μπορείς να
+        προσθέσεις έως {MAX_MACHINE_IDS} Machine-ids σε μια αίτηση.
       </p>
 
       <div className="mb-5">
-        <label
-          htmlFor="machineId"
-          className="block text-sm font-semibold text-slate-200 mb-2"
-        >
-          Machine-id <span className="text-red-400">*</span>
+        <label className="block text-sm font-semibold text-slate-200 mb-2">
+          Machine-ids <span className="text-red-400">*</span>{" "}
+          <span className="text-slate-500 font-normal text-xs">
+            ({machineIds.length}/{MAX_MACHINE_IDS})
+          </span>
         </label>
-        <input
-          id="machineId"
-          type="text"
-          value={machineId}
-          onChange={(e) => setMachineId(e.target.value)}
-          placeholder="π.χ. 49408922-6ea1-488f-8293-6d37cdb97a2d"
-          className="w-full px-4 py-3 bg-slate-900/70 border border-slate-600 rounded-xl text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-colors"
-          autoComplete="off"
-          spellCheck="false"
-        />
-        <p className="text-xs text-slate-500 mt-1.5">
-          Αντίγραψέ το από το Service Manager Pro (Διαχείριση Srv Manager →
-          Machine ID).
+
+        <div className="space-y-2">
+          {machineIds.map((mid, index) => (
+            <div key={index} className="flex items-start gap-2">
+              <div className="flex-shrink-0 w-8 h-11 flex items-center justify-center text-xs text-slate-500 font-mono">
+                #{index + 1}
+              </div>
+              <input
+                type="text"
+                value={mid}
+                onChange={(e) => onMachineIdChange(index, e.target.value)}
+                placeholder={
+                  index === 0
+                    ? "π.χ. 49408922-6ea1-488f-8293-6d37cdb97a2d"
+                    : "Machine-id"
+                }
+                className="flex-1 px-4 py-3 bg-slate-900/70 border border-slate-600 rounded-xl text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-colors"
+                autoComplete="off"
+                spellCheck="false"
+              />
+              <button
+                type="button"
+                onClick={() => onRemoveMachineId(index)}
+                title={
+                  machineIds.length === 1
+                    ? "Καθαρισμός πεδίου"
+                    : "Αφαίρεση Machine-id"
+                }
+                aria-label="Αφαίρεση"
+                className="flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-lg transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {canAddMore && (
+          <button
+            type="button"
+            onClick={onAddMachineId}
+            className="mt-3 w-full px-4 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-dashed border-cyan-500/40 text-cyan-200 font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+          >
+            <span className="text-lg">+</span>
+            <span>Προσθήκη νέου Machine-id</span>
+          </button>
+        )}
+
+        <p className="text-xs text-slate-500 mt-2">
+          Αντίγραψε κάθε Machine-id από το Service Manager Pro (Διαχείριση Srv
+          Manager → Machine ID).
         </p>
       </div>
 
@@ -323,7 +396,8 @@ function FormCard({
         <span className="text-amber-400 text-lg leading-none mt-0.5">⚠️</span>
         <p className="text-sm text-amber-100/90 leading-snug">
           <span className="font-semibold">Φύλαξε το</span> — ώστε να μπορείς να
-          αναζητήσεις την Αίτηση σου!
+          αναζητήσεις την Αίτηση σου (ένα Pickup Code για όλα τα Machine-ids
+          της αίτησης)!
         </p>
       </div>
 
@@ -369,7 +443,6 @@ function FormCard({
         />
       </div>
 
-      {/* Turnstile widget */}
       {hasSiteKey && (
         <div className="mb-5">
           <div
@@ -404,7 +477,7 @@ function FormCard({
   );
 }
 
-function SuccessCard({ pickupCode, onBackHome }) {
+function SuccessCard({ pickupCode, machineCount, onBackHome }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -439,7 +512,9 @@ function SuccessCard({ pickupCode, onBackHome }) {
         Η αίτησή σου καταχωρήθηκε
       </h1>
       <p className="text-slate-300 text-center text-sm mb-6">
-        Θα ειδοποιηθώ αμέσως και θα ετοιμάσω το κλειδί ενεργοποίησης.
+        {machineCount === 1
+          ? "Θα ειδοποιηθώ αμέσως και θα ετοιμάσω το κλειδί ενεργοποίησης."
+          : `Θα ειδοποιηθώ αμέσως και θα ετοιμάσω τα ${machineCount} κλειδιά ενεργοποίησης.`}
       </p>
 
       <div className="mb-5">
@@ -475,7 +550,7 @@ function SuccessCard({ pickupCode, onBackHome }) {
           Τι κάνεις τώρα
         </div>
         <ol className="text-sm text-slate-300 space-y-2 list-decimal list-inside">
-          <li>Περίμενε λίγες ώρες να ετοιμαστεί το κλειδί σου.</li>
+          <li>Περίμενε λίγες ώρες να ετοιμαστούν τα κλειδιά σου.</li>
           <li>
             Επίστρεψε εδώ και πάτα{" "}
             <span className="text-cyan-300 font-semibold">
@@ -484,8 +559,9 @@ function SuccessCard({ pickupCode, onBackHome }) {
             .
           </li>
           <li>
-            Χρησιμοποίησε το Pickup Code σου για να κατεβάσεις το αρχείο{" "}
-            <code className="text-cyan-300 font-mono text-xs">.txt</code>.
+            Χρησιμοποίησε το Pickup Code σου για να κατεβάσεις τα αρχεία{" "}
+            <code className="text-cyan-300 font-mono text-xs">.txt</code>{" "}
+            (ένα για κάθε Machine-id).
           </li>
         </ol>
       </div>

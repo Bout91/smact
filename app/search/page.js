@@ -91,7 +91,7 @@ export default function SearchPage() {
         </header>
 
         <div className="flex-1 flex items-start justify-center px-4 pb-12 pt-4">
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-2xl">
             {!result ? (
               <SearchCard
                 pickupCode={pickupCode}
@@ -100,8 +100,8 @@ export default function SearchPage() {
                 searching={searching}
                 errorMsg={errorMsg}
               />
-            ) : result.status === "ready" ? (
-              <ReadyCard result={result} onReset={handleReset} />
+            ) : result.status === "ready" || result.status === "partial" ? (
+              <ResultCard result={result} onReset={handleReset} />
             ) : result.status === "pending" ? (
               <PendingCard result={result} onReset={handleReset} />
             ) : (
@@ -185,109 +185,75 @@ function SearchCard({
   );
 }
 
-function ReadyCard({ result, onReset }) {
-  const [copied, setCopied] = useState(false);
-
-  const readyAt = result.readyAt
-    ? new Date(result.readyAt).toLocaleString("el-GR")
-    : "";
-
-  const fileContent = buildActivationFileContent({
-    machineId: result.machineId,
-    pickupCode: result.pickupCode,
-    activationKey: result.activationKey,
-    readyAt: result.readyAt,
-  });
-
-  async function handleCopyKey() {
-    try {
-      await navigator.clipboard.writeText(result.activationKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  }
-
-  function handleDownload() {
-    const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `smact-activation-${result.pickupCode}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+function ResultCard({ result, onReset }) {
+  const isPartial = result.status === "partial";
+  const total = result.totalMachines || result.machines?.length || 0;
+  const approved = result.approvedMachines || 0;
 
   return (
-    <div className="bg-slate-800/60 backdrop-blur-md border border-emerald-500/30 rounded-2xl p-6 md:p-8 shadow-2xl">
+    <div
+      className={`bg-slate-800/60 backdrop-blur-md border rounded-2xl p-6 md:p-8 shadow-2xl ${
+        isPartial ? "border-amber-500/30" : "border-emerald-500/30"
+      }`}
+    >
       <div className="flex justify-center mb-4">
-        <div className="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-400/60 flex items-center justify-center">
-          <svg
-            className="w-10 h-10 text-emerald-400"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+        <div
+          className={`w-20 h-20 rounded-full flex items-center justify-center border-2 ${
+            isPartial
+              ? "bg-amber-500/20 border-amber-400/60"
+              : "bg-emerald-500/20 border-emerald-400/60"
+          }`}
+        >
+          {isPartial ? (
+            <span className="text-4xl">⏳</span>
+          ) : (
+            <svg
+              className="w-10 h-10 text-emerald-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          )}
         </div>
       </div>
 
       <h1 className="text-2xl md:text-3xl font-bold text-white text-center mb-2">
-        Το κλειδί σου είναι έτοιμο!
+        {isPartial
+          ? "Μερικά κλειδιά έτοιμα"
+          : total === 1
+            ? "Το κλειδί σου είναι έτοιμο!"
+            : "Τα κλειδιά σου είναι έτοιμα!"}
       </h1>
-      {readyAt && (
-        <p className="text-slate-400 text-center text-sm mb-6">
-          Ετοιμάστηκε στις: <span className="text-slate-200">{readyAt}</span>
-        </p>
-      )}
 
-      <button
-        type="button"
-        onClick={handleDownload}
-        className="w-full mb-4 px-6 py-4 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-base shadow-lg shadow-blue-900/50 hover:shadow-xl hover:shadow-blue-900/70 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200"
-      >
-        <span className="flex items-center justify-center gap-3">
-          <span className="text-2xl">⬇</span>
-          <span>Κατέβασε το αρχείο ενεργοποίησης</span>
-        </span>
-      </button>
+      <div className="text-center text-slate-300 text-sm mb-6">
+        <span className="font-semibold text-cyan-300">
+          {approved} από {total}
+        </span>{" "}
+        {total === 1 ? "κλειδί έτοιμο" : "κλειδιά έτοιμα"}
+        {isPartial && (
+          <>
+            {" "}
+            — τα υπόλοιπα σε λίγες ώρες
+          </>
+        )}
+      </div>
 
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs uppercase tracking-widest text-slate-400 font-semibold">
-            Ή αντίγραψε το κλειδί απευθείας
-          </div>
-          <button
-            type="button"
-            onClick={handleCopyKey}
-            className="px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
-          >
-            {copied ? (
-              <>
-                <span>✓</span>
-                <span>Αντιγράφηκε</span>
-              </>
-            ) : (
-              <>
-                <span>📋</span>
-                <span>Αντιγραφή</span>
-              </>
-            )}
-          </button>
-        </div>
-        <textarea
-          readOnly
-          value={result.activationKey || ""}
-          onFocus={(e) => e.target.select()}
-          className="w-full h-28 px-3 py-2.5 bg-slate-900/70 border border-cyan-500/40 rounded-lg text-cyan-100 font-mono text-xs resize-none focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
-        />
+      <div className="space-y-4 mb-6">
+        {result.machines.map((m, idx) => (
+          <MachineBlock
+            key={m.id}
+            index={idx}
+            machine={m}
+            pickupCode={result.pickupCode}
+          />
+        ))}
       </div>
 
       <div className="mb-6 bg-slate-900/40 border border-slate-700/50 rounded-lg p-4">
@@ -319,10 +285,140 @@ function ReadyCard({ result, onReset }) {
   );
 }
 
+function MachineBlock({ index, machine, pickupCode }) {
+  const [copied, setCopied] = useState(false);
+  const isReady = !!machine.activationKey;
+
+  const readyAt = machine.readyAt
+    ? new Date(machine.readyAt).toLocaleString("el-GR")
+    : "";
+
+  async function handleCopyKey() {
+    try {
+      await navigator.clipboard.writeText(machine.activationKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  }
+
+  function handleDownload() {
+    const fileContent = buildActivationFileContent({
+      machineId: machine.machineId,
+      pickupCode,
+      activationKey: machine.activationKey,
+      readyAt: machine.readyAt,
+    });
+    const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `smact-activation-${pickupCode}-${index + 1}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        isReady
+          ? "bg-slate-900/50 border-emerald-500/30"
+          : "bg-slate-900/30 border-slate-700/50"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-mono">
+            #{index + 1}
+          </span>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold ${
+              isReady
+                ? "bg-emerald-500/20 text-emerald-200"
+                : "bg-amber-500/20 text-amber-200"
+            }`}
+          >
+            {isReady ? "✅ Έτοιμο" : "⏳ Εκκρεμεί"}
+          </span>
+        </div>
+        {readyAt && (
+          <div className="text-[10px] text-slate-500">
+            Ετοιμάστηκε: {readyAt}
+          </div>
+        )}
+      </div>
+
+      <div className="mb-3">
+        <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
+          Machine ID
+        </div>
+        <code className="block bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-cyan-100 font-mono text-xs break-all">
+          {machine.machineId}
+        </code>
+      </div>
+
+      {isReady ? (
+        <>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="w-full mb-3 px-4 py-2.5 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-sm shadow hover:scale-[1.01] active:scale-[0.99] transition-all"
+          >
+            <span className="flex items-center justify-center gap-2">
+              <span className="text-lg">⬇</span>
+              <span>Κατέβασε το .txt</span>
+            </span>
+          </button>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+                Ή αντίγραψε το κλειδί
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyKey}
+                className="px-2.5 py-1 rounded-md bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors flex items-center gap-1"
+              >
+                {copied ? (
+                  <>
+                    <span>✓</span>
+                    <span>OK</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📋</span>
+                    <span>Αντιγραφή</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={machine.activationKey || ""}
+              onFocus={(e) => e.target.select()}
+              className="w-full h-20 px-2.5 py-2 bg-slate-950/60 border border-cyan-500/40 rounded-lg text-cyan-100 font-mono text-[11px] resize-none focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+            />
+          </div>
+        </>
+      ) : (
+        <div className="px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+          <p className="text-xs text-amber-100/90">
+            Το κλειδί για αυτό το Machine-id δεν έχει ετοιμαστεί ακόμα.
+            Επίστρεψε σε λίγες ώρες.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PendingCard({ result, onReset }) {
   const submittedAt = result.submittedAt
     ? new Date(result.submittedAt).toLocaleString("el-GR")
     : "";
+  const total = result.totalMachines || result.machines?.length || 0;
 
   return (
     <div className="bg-slate-800/60 backdrop-blur-md border border-amber-500/30 rounded-2xl p-6 md:p-8 shadow-2xl">
@@ -336,7 +432,9 @@ function PendingCard({ result, onReset }) {
         Η αίτησή σου εκκρεμεί
       </h1>
       <p className="text-slate-300 text-center text-sm mb-6">
-        Το κλειδί σου δεν έχει ετοιμαστεί ακόμα.
+        {total > 1
+          ? `Τα ${total} κλειδιά σου δεν έχουν ετοιμαστεί ακόμα.`
+          : "Το κλειδί σου δεν έχει ετοιμαστεί ακόμα."}
       </p>
 
       {submittedAt && (
@@ -351,7 +449,8 @@ function PendingCard({ result, onReset }) {
       <div className="mb-6 flex items-start gap-2 px-3 py-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
         <span className="text-cyan-400 text-lg leading-none mt-0.5">ℹ️</span>
         <p className="text-sm text-cyan-100/90 leading-snug">
-          Ο διαχειριστής θα ετοιμάσει το κλειδί σύντομα. Δοκίμασε ξανά σε
+          Ο διαχειριστής θα ετοιμάσει{" "}
+          {total > 1 ? "τα κλειδιά" : "το κλειδί"} σύντομα. Δοκίμασε ξανά σε
           λίγες ώρες.
         </p>
       </div>

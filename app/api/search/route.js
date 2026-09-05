@@ -1,8 +1,14 @@
 // ─────────────────────────────────────────────────────────
 // POST /api/search — Αναζήτηση αίτησης με pickup code
 //
-// Φάση 4.3: Πραγματικό SELECT από τη Neon DB.
-// Αφαιρέθηκαν τα magic test strings της Φάσης 3.3.
+// Φάση 8: Επιστρέφει array από machines. Το κάθε machine έχει το
+// δικό του activationKey/readyAt — μπορεί να είναι μερικώς έτοιμη.
+//
+// status:
+//   • ready    → ΟΛΑ τα machines έχουν key (requests.status='ready')
+//   • partial  → κάποια έχουν key αλλά όχι όλα
+//   • pending  → κανένα δεν έχει key
+//   • not_found → δεν υπάρχει pickup code
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -23,51 +29,66 @@ export async function POST(request) {
       );
     }
 
-    // Αν κάποιος χρησιμοποίησε το ίδιο pickup code σε πολλές αιτήσεις
-    // (πχ ξέχασε την προηγούμενη), επιστρέφουμε την ΠΙΟ ΠΡΟΣΦΑΤΗ.
-    const rows = await sql`
-      SELECT
-        id,
-        machine_id,
-        pickup_code,
-        status,
-        activation_key,
-        submitted_at,
-        ready_at
+    // Πάρε την πιο πρόσφατη αίτηση με αυτό το pickup code
+    const reqRows = await sql`
+      SELECT id, pickup_code, status, submitted_at, ready_at
       FROM requests
       WHERE pickup_code = ${pickupCode}
       ORDER BY submitted_at DESC
       LIMIT 1
     `;
 
-    if (rows.length === 0) {
+    if (reqRows.length === 0) {
       return Response.json({ status: "not_found" });
     }
 
-    const row = rows[0];
+    const row = reqRows[0];
     const submittedAt =
       row.submitted_at instanceof Date
         ? row.submitted_at.toISOString()
         : row.submitted_at;
     const readyAt =
-      row.ready_at instanceof Date
-        ? row.ready_at.toISOString()
-        : row.ready_at;
+      row.ready_at instanceof Date ? row.ready_at.toISOString() : row.ready_at;
 
-    if (row.status === "ready" && row.activation_key) {
-      return Response.json({
-        status: "ready",
-        submittedAt,
-        readyAt,
-        machineId: row.machine_id,
-        activationKey: row.activation_key,
-      });
+    // Πάρε όλα τα machines
+    const machineRows = await sql`
+      SELECT id, machine_id, activation_key, ready_at, position
+      FROM request_machines
+      WHERE request_id = ${row.id}
+      ORDER BY position ASC
+    `;
+
+    const machines = machineRows.map((m) => ({
+      id: m.id,
+      machineId: m.machine_id,
+      activationKey: m.activation_key,
+      readyAt:
+        m.ready_at instanceof Date ? m.ready_at.toISOString() : m.ready_at,
+    }));
+
+    const total = machines.length;
+    const approved = machines.filter((m) => m.activationKey).length;
+
+    let status;
+    if (total === 0) {
+      // Edge case: legacy request χωρίς machines (δεν πρέπει να συμβεί μετά τη migration)
+      status = "pending";
+    } else if (approved === total) {
+      status = "ready";
+    } else if (approved > 0) {
+      status = "partial";
+    } else {
+      status = "pending";
     }
 
-    // Αλλιώς pending (status='pending' ή status='ready' χωρίς key για κάποιο λόγο)
     return Response.json({
-      status: "pending",
+      status,
       submittedAt,
+      readyAt,
+      pickupCode: row.pickup_code,
+      totalMachines: total,
+      approvedMachines: approved,
+      machines,
     });
   } catch (err) {
     console.error("[SMAct] Search handler error:", err);

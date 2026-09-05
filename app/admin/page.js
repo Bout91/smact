@@ -167,12 +167,12 @@ function AdminDashboard({ onLogout }) {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // approveTarget: { request, machine } — approve modal για ΕΝΑ machine
   const [approveTarget, setApproveTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  // Bulk selection state (μόνο για το Ιστορικό)
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const loadRequests = useCallback(async () => {
@@ -222,7 +222,8 @@ function AdminDashboard({ onLogout }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: approveTarget.id,
+          requestId: approveTarget.request.id,
+          machineRowId: approveTarget.machine.id,
           activationKey,
         }),
         credentials: "include",
@@ -411,7 +412,6 @@ function AdminDashboard({ onLogout }) {
             </TabButton>
           </div>
 
-          {/* Bulk toolbar στο Ιστορικό */}
           {isHistory && requests.length > 0 && (
             <div className="mb-4 flex items-center justify-between gap-3 flex-wrap px-3 py-2.5 bg-slate-800/40 border border-slate-700/40 rounded-lg">
               <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 select-none">
@@ -422,9 +422,7 @@ function AdminDashboard({ onLogout }) {
                   className="w-4 h-4 accent-cyan-500 cursor-pointer"
                 />
                 <span>
-                  {allSelected
-                    ? "Απεπιλογή όλων"
-                    : "Επιλογή όλων"}
+                  {allSelected ? "Απεπιλογή όλων" : "Επιλογή όλων"}
                 </span>
                 <span className="text-slate-400">
                   ({selectedIds.size} επιλεγμένες)
@@ -462,7 +460,9 @@ function AdminDashboard({ onLogout }) {
                 <RequestCard
                   key={r.id}
                   request={r}
-                  onApprove={() => setApproveTarget(r)}
+                  onApproveMachine={(machine) =>
+                    setApproveTarget({ request: r, machine })
+                  }
                   onDelete={() => setDeleteTarget(r)}
                   showCheckbox={isHistory}
                   checked={selectedIds.has(r.id)}
@@ -482,7 +482,8 @@ function AdminDashboard({ onLogout }) {
 
       {approveTarget && (
         <ApproveModal
-          request={approveTarget}
+          request={approveTarget.request}
+          machine={approveTarget.machine}
           onClose={() => setApproveTarget(null)}
           onConfirm={handleApproveConfirm}
         />
@@ -532,34 +533,32 @@ function TabButton({ active, onClick, children }) {
 
 function RequestCard({
   request,
-  onApprove,
+  onApproveMachine,
   onDelete,
   showCheckbox,
   checked,
   onToggleCheck,
   hideActions,
 }) {
-  const [copied, setCopied] = useState(false);
-
   const submittedAt = new Date(request.submittedAt).toLocaleString("el-GR");
   const readyAt = request.readyAt
     ? new Date(request.readyAt).toLocaleString("el-GR")
     : null;
 
-  async function handleCopyMachineId() {
-    try {
-      await navigator.clipboard.writeText(request.machineId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  }
-
   const isReady = request.status === "ready";
+  const machines = request.machines || [];
+  const total = request.totalMachines ?? machines.length;
+  const approved = request.approvedMachines ?? 0;
+  const isPartial = !isReady && approved > 0;
 
   return (
     <div
       className={`bg-slate-800/60 backdrop-blur-sm border rounded-xl p-4 md:p-5 flex gap-3 ${
-        isReady ? "border-emerald-500/30" : "border-amber-500/30"
+        isReady
+          ? "border-emerald-500/30"
+          : isPartial
+            ? "border-cyan-500/30"
+            : "border-amber-500/30"
       } ${checked ? "ring-2 ring-cyan-500/40" : ""}`}
     >
       {showCheckbox && (
@@ -575,47 +574,29 @@ function RequestCard({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
-              isReady
-                ? "bg-emerald-500/20 text-emerald-200"
-                : "bg-amber-500/20 text-amber-200"
-            }`}
-          >
-            {isReady ? "✅ Ολοκληρωμένη" : "⏳ Εκκρεμής"}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
+                isReady
+                  ? "bg-emerald-500/20 text-emerald-200"
+                  : isPartial
+                    ? "bg-cyan-500/20 text-cyan-200"
+                    : "bg-amber-500/20 text-amber-200"
+              }`}
+            >
+              {isReady
+                ? "✅ Ολοκληρωμένη"
+                : isPartial
+                  ? "⏳ Μερική"
+                  : "⏳ Εκκρεμής"}
+            </span>
+            <span className="text-xs text-slate-300 font-mono bg-slate-900/60 px-2 py-1 rounded-md">
+              {approved} / {total} machine-ids
+            </span>
+          </div>
           <div className="text-xs text-slate-400 text-right">
             <div>Υποβλήθηκε: {submittedAt}</div>
             {readyAt && <div>Ετοιμάστηκε: {readyAt}</div>}
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">
-            Machine ID
-          </div>
-          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
-            <code className="flex-1 text-cyan-100 font-mono text-sm break-all">
-              {request.machineId}
-            </code>
-            <button
-              type="button"
-              onClick={handleCopyMachineId}
-              title="Αντιγραφή για να το βάλεις στο SM Key Signer"
-              className="shrink-0 px-3 py-1.5 rounded-md bg-slate-700/70 hover:bg-slate-700 text-slate-100 text-xs font-semibold transition-colors flex items-center gap-1"
-            >
-              {copied ? (
-                <>
-                  <span>✓</span>
-                  <span>OK</span>
-                </>
-              ) : (
-                <>
-                  <span>📋</span>
-                  <span>Αντιγραφή</span>
-                </>
-              )}
-            </button>
           </div>
         </div>
 
@@ -646,25 +627,27 @@ function RequestCard({
           </div>
         </div>
 
+        {/* Machines list */}
+        <div className="space-y-2 mb-4">
+          {machines.map((m, idx) => (
+            <MachineRow
+              key={m.id}
+              index={idx}
+              machine={m}
+              onApprove={() => onApproveMachine(m)}
+              hideActions={hideActions}
+            />
+          ))}
+        </div>
+
         {!hideActions && (
           <div className="flex flex-col sm:flex-row gap-2">
-            {!isReady && (
-              <button
-                type="button"
-                onClick={onApprove}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white font-semibold text-sm shadow hover:scale-[1.01] active:scale-[0.99] transition-all"
-              >
-                ✓ Έγκριση
-              </button>
-            )}
             <button
               type="button"
               onClick={onDelete}
-              className={`${
-                isReady ? "flex-1" : ""
-              } px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-semibold text-sm transition-colors`}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 font-semibold text-sm transition-colors"
             >
-              🗑 Διαγραφή
+              🗑 Διαγραφή αίτησης
             </button>
           </div>
         )}
@@ -673,7 +656,108 @@ function RequestCard({
   );
 }
 
-function ApproveModal({ request, onClose, onConfirm }) {
+function MachineRow({ index, machine, onApprove, hideActions }) {
+  const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const isReady = !!machine.activationKey;
+
+  async function handleCopyMachineId() {
+    try {
+      await navigator.clipboard.writeText(machine.machineId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  }
+
+  async function handleCopyKey() {
+    try {
+      await navigator.clipboard.writeText(machine.activationKey);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    } catch {}
+  }
+
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        isReady
+          ? "bg-emerald-500/5 border-emerald-500/20"
+          : "bg-slate-900/40 border-slate-700/50"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-xs text-slate-500 font-mono">#{index + 1}</span>
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+            isReady
+              ? "bg-emerald-500/20 text-emerald-200"
+              : "bg-amber-500/20 text-amber-200"
+          }`}
+        >
+          {isReady ? "✅ Έτοιμο" : "⏳ Εκκρεμεί"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-700 rounded-md px-2.5 py-1.5 mb-2">
+        <code className="flex-1 text-cyan-100 font-mono text-xs break-all">
+          {machine.machineId}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopyMachineId}
+          title="Αντιγραφή Machine-id για SM Key Signer"
+          className="shrink-0 px-2 py-1 rounded bg-slate-700/70 hover:bg-slate-700 text-slate-100 text-[10px] font-semibold transition-colors flex items-center gap-1"
+        >
+          {copied ? (
+            <>
+              <span>✓</span>
+              <span>OK</span>
+            </>
+          ) : (
+            <>
+              <span>📋</span>
+              <span>Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {isReady && (
+        <div className="mb-2">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1 flex items-center justify-between">
+            <span>Activation Key</span>
+            <button
+              type="button"
+              onClick={handleCopyKey}
+              className="px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold transition-colors"
+            >
+              {copiedKey ? "✓ OK" : "📋 Copy"}
+            </button>
+          </div>
+          <div className="text-cyan-100 font-mono text-[10px] bg-slate-950/60 border border-emerald-500/30 rounded px-2 py-1 break-all max-h-16 overflow-y-auto">
+            {machine.activationKey}
+          </div>
+        </div>
+      )}
+
+      {!hideActions && (
+        <button
+          type="button"
+          onClick={onApprove}
+          className={`w-full px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
+            isReady
+              ? "bg-slate-700/60 hover:bg-slate-700 text-slate-200"
+              : "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white hover:scale-[1.01] active:scale-[0.99] shadow"
+          }`}
+        >
+          {isReady ? "↻ Αντικατάσταση κλειδιού" : "✓ Έγκριση αυτού"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ApproveModal({ request, machine, onClose, onConfirm }) {
   const [activationKey, setActivationKey] = useState("");
   const [fileError, setFileError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -725,7 +809,9 @@ function ApproveModal({ request, onClose, onConfirm }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <div className="w-full max-w-lg bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-white">Έγκριση Αίτησης</h2>
+          <h2 className="text-xl font-bold text-white">
+            Έγκριση Machine-id
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -735,11 +821,20 @@ function ApproveModal({ request, onClose, onConfirm }) {
           </button>
         </div>
 
-        <div className="mb-4 bg-slate-900/60 border border-slate-700 rounded-lg p-3 text-sm">
+        <div className="mb-3 bg-slate-900/60 border border-slate-700 rounded-lg p-3 text-sm">
           <div className="text-xs uppercase tracking-widest text-slate-500 mb-1">
             Pickup Code
           </div>
           <div className="text-cyan-200 font-mono">{request.pickupCode}</div>
+        </div>
+
+        <div className="mb-4 bg-slate-900/60 border border-slate-700 rounded-lg p-3">
+          <div className="text-xs uppercase tracking-widest text-slate-500 mb-1">
+            Machine-id προς έγκριση
+          </div>
+          <code className="block text-cyan-100 font-mono text-xs break-all">
+            {machine.machineId}
+          </code>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -830,12 +925,15 @@ function DeleteModal({ request, onClose, onConfirm }) {
         <h2 className="text-xl font-bold text-white text-center mb-2">
           Διαγραφή Αίτησης;
         </h2>
-        <p className="text-slate-300 text-center text-sm mb-4">
+        <p className="text-slate-300 text-center text-sm mb-2">
           Η αίτηση με Pickup Code{" "}
           <span className="text-cyan-200 font-mono font-semibold">
             {request.pickupCode}
           </span>{" "}
           θα διαγραφεί μόνιμα.
+        </p>
+        <p className="text-slate-400 text-center text-xs mb-4">
+          (Θα διαγραφούν και τα {request.totalMachines || 0} machine-ids της.)
         </p>
         <p className="text-red-300 text-center text-xs mb-6">
           Δεν μπορεί να αναιρεθεί!
