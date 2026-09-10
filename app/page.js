@@ -83,7 +83,7 @@ function SplashIntro({ fading }) {
           className="mt-3 text-sm md:text-base uppercase tracking-[0.3em] text-cyan-300/80 font-semibold animate-slide-up"
           style={{ animationDelay: "1s", opacity: 0 }}
         >
-          Activation Service
+          Download &amp; Activations Service
         </p>
       </div>
     </div>
@@ -106,7 +106,7 @@ function MainScreen() {
         <div>
           <div className="text-lg font-bold gradient-text">SMAct</div>
           <div className="text-[10px] uppercase tracking-widest text-slate-400">
-            Activation Service
+            Download &amp; Activations Service
           </div>
         </div>
       </header>
@@ -117,9 +117,10 @@ function MainScreen() {
             Καλωσορίσατε στο <span className="gradient-text">SMAct</span>
           </h1>
           <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-xl mx-auto mb-12">
-            Υπηρεσία ενεργοποίησης του Service Manager Pro. Δες τι προσφέρει το
-            πρόγραμμα, υπόβαλλε αίτηση για κωδικό ή αναζήτησε αίτηση που έχεις
-            ήδη κάνει.
+            Υπηρεσία λήψης &amp; ενεργοποίησης του Service Manager Pro. Δες τι
+            προσφέρει το πρόγραμμα, κατέβασέ το με το Κλειδί Download που
+            έχεις πάρει, υπόβαλλε αίτηση για κωδικό ενεργοποίησης ή αναζήτησε
+            αίτηση που έχεις ήδη κάνει.
           </p>
 
           <div className="flex flex-col gap-4 items-center">

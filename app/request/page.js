@@ -216,7 +216,7 @@ export default function RequestPage() {
             <div className="text-left">
               <div className="text-lg font-bold gradient-text">SMAct</div>
               <div className="text-[10px] uppercase tracking-widest text-slate-400">
-                Activation Service
+                Download &amp; Activations Service
               </div>
             </div>
           </button>
