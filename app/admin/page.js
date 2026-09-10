@@ -186,8 +186,9 @@ function AdminDashboard({ onLogout }) {
     setErrorMsg("");
     setSelectedIds(new Set());
     try {
-      const res = await fetch(`/api/admin/list?status=${tab}`, {
+      const res = await fetch(`/api/admin/list?status=${tab}&t=${Date.now()}`, {
         credentials: "include",
+        cache: "no-store",
       });
       if (res.status === 401) {
         onLogout();
@@ -300,11 +301,21 @@ function AdminDashboard({ onLogout }) {
 
   async function handleBulkDeleteConfirm() {
     try {
-      const ids = Array.from(selectedIds);
+      // Ξεχώρισε τα selectedIds σε activation UUIDs και download keys
+      // Compound ids format: "activation:UUID" ή "download:KEY"
+      const activationIds = [];
+      const downloadKeys = [];
+      for (const compoundId of selectedIds) {
+        if (compoundId.startsWith("activation:")) {
+          activationIds.push(compoundId.substring("activation:".length));
+        } else if (compoundId.startsWith("download:")) {
+          downloadKeys.push(compoundId.substring("download:".length));
+        }
+      }
       const res = await fetch("/api/admin/delete-bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ activationIds, downloadKeys }),
         credentials: "include",
       });
       const data = await res.json();
@@ -314,9 +325,7 @@ function AdminDashboard({ onLogout }) {
       }
       setBulkDeleteOpen(false);
       alert(
-        `Διαγράφηκαν ${data.deleted} αιτήσ${
-          data.deleted === 1 ? "η" : "εις"
-        } από το Ιστορικό.`
+        `Διαγράφηκαν ${data.deleted} καταχωρήσεις (${data.deletedActivation || 0} αιτήσεις + ${data.deletedDownloads || 0} download keys).`
       );
       await loadRequests();
     } catch {
@@ -324,8 +333,14 @@ function AdminDashboard({ onLogout }) {
     }
   }
 
+  // Compound id helper — μοναδικό id συνδυασμού type+id/key
+  function compoundIdOf(r) {
+    if (r.type === "download") return "download:" + r.key;
+    return "activation:" + r.id;
+  }
+
   const isHistory = tab === "history";
-  const allVisibleIds = useMemo(() => requests.map((r) => r.id), [requests]);
+  const allVisibleIds = useMemo(() => requests.map(compoundIdOf), [requests]);
   const allSelected =
     allVisibleIds.length > 0 &&
     allVisibleIds.every((id) => selectedIds.has(id));
@@ -338,10 +353,10 @@ function AdminDashboard({ onLogout }) {
     }
   }
 
-  function toggleOne(id) {
+  function toggleOne(compoundId) {
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(compoundId)) next.delete(compoundId);
+    else next.add(compoundId);
     setSelectedIds(next);
   }
 
@@ -480,17 +495,21 @@ function AdminDashboard({ onLogout }) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {requests.map((r) =>
-                    r.type === "download" ? (
+                  {requests.map((r) => {
+                    const cid = compoundIdOf(r);
+                    return r.type === "download" ? (
                       <DownloadRequestCard
-                        key={"dl-" + r.id}
+                        key={cid}
                         request={r}
                         onRefresh={loadRequests}
+                        showCheckbox={isHistory}
+                        checked={selectedIds.has(cid)}
+                        onToggleCheck={() => toggleOne(cid)}
                         hideActions={isHistory}
                       />
                     ) : (
                       <RequestCard
-                        key={r.id}
+                        key={cid}
                         request={r}
                         onApproveMachine={(machine) =>
                           setApproveTarget({ request: r, machine })
@@ -518,12 +537,12 @@ function AdminDashboard({ onLogout }) {
                         }}
                         onDelete={() => setDeleteTarget(r)}
                         showCheckbox={isHistory}
-                        checked={selectedIds.has(r.id)}
-                        onToggleCheck={() => toggleOne(r.id)}
+                        checked={selectedIds.has(cid)}
+                        onToggleCheck={() => toggleOne(cid)}
                         hideActions={isHistory}
                       />
-                    )
-                  )}
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -1591,7 +1610,7 @@ function ToolbarDivider() {
 // Φάση 12b: DownloadRequestCard — για download requests στα tabs Εκκρεμείς/Ολοκληρωμένες/Ιστορικό
 // (πορτοκαλί background για να ξεχωρίζει από activation requests)
 // ─────────────────────────────────────────────────────────
-function DownloadRequestCard({ request, onRefresh, hideActions }) {
+function DownloadRequestCard({ request, onRefresh, hideActions, showCheckbox, checked, onToggleCheck }) {
   const [copied, setCopied] = useState(false);
 
   async function copyKey() {
@@ -1640,7 +1659,18 @@ function DownloadRequestCard({ request, onRefresh, hideActions }) {
   const lastDl = request.lastDownloadAt ? new Date(request.lastDownloadAt).toLocaleString("el-GR") : null;
 
   return (
-    <div className={`backdrop-blur-sm border-2 rounded-xl p-4 md:p-5 ${statusColors[request.status] || statusColors.pending}`}>
+    <div className={`backdrop-blur-sm border-2 rounded-xl p-4 md:p-5 flex gap-3 ${statusColors[request.status] || statusColors.pending} ${checked ? "ring-2 ring-cyan-500/40" : ""}`}>
+      {showCheckbox && (
+        <div className="flex-shrink-0 pt-1">
+          <input
+            type="checkbox"
+            checked={!!checked}
+            onChange={onToggleCheck}
+            className="w-5 h-5 accent-cyan-500 cursor-pointer"
+          />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-500/30 text-orange-100">
@@ -1704,6 +1734,7 @@ function DownloadRequestCard({ request, onRefresh, hideActions }) {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // POST /api/signer/download-keys/delete — Bearer token
 // Body: { key }
-// Διαγράφει ένα κλειδί (μόνο αν είναι σε status 'preauth' ή 'rejected').
+// Διαγράφει ένα κλειδί ΑΝΕΞΑΡΤΗΤΩΣ status (για history cleanup από admin).
 
 import { neon } from "@neondatabase/serverless";
 
@@ -37,7 +37,7 @@ export async function POST(request) {
 
     const rows = await sql`
       DELETE FROM download_keys
-      WHERE key = ${key} AND status IN ('preauth', 'rejected')
+      WHERE key = ${key}
       RETURNING id
     `;
     return Response.json({ ok: true, deleted: rows.length });
