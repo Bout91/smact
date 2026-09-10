@@ -176,6 +176,9 @@ function AdminDashboard({ onLogout }) {
 
   const [selectedIds, setSelectedIds] = useState(new Set());
 
+  // Φάση 12d: search filter για Ολοκληρωμένες + Ιστορικό tabs
+  const [searchTerm, setSearchTerm] = useState("");
+
   const loadRequests = useCallback(async () => {
     // Στα showcase/download tabs δεν φορτώνουμε αιτήσεις
     if (tab === "showcase" || tab === "download") {
@@ -185,6 +188,7 @@ function AdminDashboard({ onLogout }) {
     setLoading(true);
     setErrorMsg("");
     setSelectedIds(new Set());
+    setSearchTerm("");
     try {
       const res = await fetch(`/api/admin/list?status=${tab}&t=${Date.now()}`, {
         credentials: "include",
@@ -340,7 +344,36 @@ function AdminDashboard({ onLogout }) {
   }
 
   const isHistory = tab === "history";
-  const allVisibleIds = useMemo(() => requests.map(compoundIdOf), [requests]);
+  const isReady = tab === "ready";
+  const showSearch = isHistory || isReady;
+
+  // Φάση 12d: search filter — αναζήτηση σε pickup, unit, office, machine-ids, activation keys, download keys, notes
+  const filteredRequests = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return requests;
+    return requests.filter((r) => {
+      if (r.type === "download") {
+        return (
+          (r.key || "").toLowerCase().includes(term) ||
+          (r.notes || "").toLowerCase().includes(term)
+        );
+      }
+      // activation
+      if ((r.pickupCode || "").toLowerCase().includes(term)) return true;
+      if ((r.unit || "").toLowerCase().includes(term)) return true;
+      if ((r.office || "").toLowerCase().includes(term)) return true;
+      if ((r.downloadKey || "").toLowerCase().includes(term)) return true;
+      if (Array.isArray(r.machines)) {
+        for (const m of r.machines) {
+          if ((m.machineId || "").toLowerCase().includes(term)) return true;
+          if ((m.activationKey || "").toLowerCase().includes(term)) return true;
+        }
+      }
+      return false;
+    });
+  }, [requests, searchTerm]);
+
+  const allVisibleIds = useMemo(() => filteredRequests.map(compoundIdOf), [filteredRequests]);
   const allSelected =
     allVisibleIds.length > 0 &&
     allVisibleIds.every((id) => selectedIds.has(id));
@@ -451,7 +484,34 @@ function AdminDashboard({ onLogout }) {
             <DownloadAdminPanel onUnauthorized={onLogout} />
           ) : (
             <>
-              {isHistory && requests.length > 0 && (
+              {/* Φάση 12d: Search field στα Ολοκληρωμένες + Ιστορικό */}
+              {showSearch && requests.length > 0 && (
+                <div className="mb-4 flex items-center gap-3 px-3 py-2.5 bg-slate-800/40 border border-slate-700/40 rounded-lg">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="🔍 Αναζήτηση σε keys, machine-ids, pickup, unit, notes..."
+                    className="flex-1 px-3 py-2 bg-slate-900/60 border border-slate-700 rounded-md text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="px-3 py-2 rounded-md bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm"
+                    >
+                      Καθαρισμός
+                    </button>
+                  )}
+                  <span className="text-xs text-slate-400 font-semibold whitespace-nowrap">
+                    {searchTerm
+                      ? `${filteredRequests.length} από ${requests.length}`
+                      : `${requests.length} συνολικά`}
+                  </span>
+                </div>
+              )}
+
+              {isHistory && filteredRequests.length > 0 && (
                 <div className="mb-4 flex items-center justify-between gap-3 flex-wrap px-3 py-2.5 bg-slate-800/40 border border-slate-700/40 rounded-lg">
                   <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 select-none">
                     <input
@@ -485,17 +545,19 @@ function AdminDashboard({ onLogout }) {
                 <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-200 text-sm">
                   {errorMsg}
                 </div>
-              ) : requests.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <div className="text-center text-slate-400 py-12">
-                  {tab === "pending"
-                    ? "Καμία εκκρεμής αίτηση."
-                    : tab === "ready"
-                      ? "Καμία ολοκληρωμένη αίτηση."
-                      : "Το Ιστορικό είναι άδειο."}
+                  {searchTerm && requests.length > 0
+                    ? `Καμία αντιστοίχιση για "${searchTerm}".`
+                    : tab === "pending"
+                      ? "Καμία εκκρεμής αίτηση."
+                      : tab === "ready"
+                        ? "Καμία ολοκληρωμένη αίτηση."
+                        : "Το Ιστορικό είναι άδειο."}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {requests.map((r) => {
+                  {filteredRequests.map((r) => {
                     const cid = compoundIdOf(r);
                     return r.type === "download" ? (
                       <DownloadRequestCard

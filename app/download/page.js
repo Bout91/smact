@@ -25,13 +25,10 @@ export default function DownloadPage() {
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
 
-  // Turnstile — one widget shared, two use cases
+  // Turnstile — μόνο για το download key check (feedback χωρίς captcha, Φάση 12d)
   const [tokenCheck, setTokenCheck] = useState("");
-  const [tokenFeedback, setTokenFeedback] = useState("");
   const turnstileCheckRef = useRef(null);
-  const turnstileFeedbackRef = useRef(null);
   const widgetCheckIdRef = useRef(null);
-  const widgetFeedbackIdRef = useRef(null);
 
   // Load public settings for contact message
   useEffect(() => {
@@ -67,18 +64,7 @@ export default function DownloadPage() {
           });
         } catch {}
       }
-      if (turnstileFeedbackRef.current && !widgetFeedbackIdRef.current) {
-        try {
-          widgetFeedbackIdRef.current = window.turnstile.render(turnstileFeedbackRef.current, {
-            sitekey: TURNSTILE_SITE_KEY,
-            theme: "dark",
-            language: "el",
-            callback: (t) => setTokenFeedback(t),
-            "error-callback": () => setTokenFeedback(""),
-            "expired-callback": () => setTokenFeedback(""),
-          });
-        } catch {}
-      }
+      // Φάση 12d: Feedback captcha αφαιρέθηκε — αντικαταστάθηκε με rate limit + key validation
     }
 
     tryRender();
@@ -91,12 +77,6 @@ export default function DownloadPage() {
     setTokenCheck("");
     if (widgetCheckIdRef.current && window.turnstile) {
       try { window.turnstile.reset(widgetCheckIdRef.current); } catch {}
-    }
-  }
-  function resetTurnstileFeedback() {
-    setTokenFeedback("");
-    if (widgetFeedbackIdRef.current && window.turnstile) {
-      try { window.turnstile.reset(widgetFeedbackIdRef.current); } catch {}
     }
   }
 
@@ -137,9 +117,8 @@ export default function DownloadPage() {
       setFeedbackError("Πρέπει να καταχωρήσεις το Κλειδί Download που έχεις πάρει.");
       return;
     }
-    if (!feedbackMsg.trim()) return;
-    if (TURNSTILE_SITE_KEY && !tokenFeedback) {
-      setFeedbackError("Ολοκλήρωσε τον έλεγχο ασφαλείας (captcha).");
+    if (!feedbackMsg.trim()) {
+      setFeedbackError("Πρέπει να γράψεις κάποιο σχόλιο.");
       return;
     }
     setFeedbackSending(true);
@@ -150,20 +129,17 @@ export default function DownloadPage() {
         body: JSON.stringify({
           message: feedbackMsg.trim(),
           associatedKey: feedbackKey.trim(),
-          turnstileToken: tokenFeedback,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setFeedbackError(data.error || "Σφάλμα κατά την αποστολή.");
-        resetTurnstileFeedback();
       } else {
         setFeedbackDone(true);
         setFeedbackMsg("");
       }
     } catch {
       setFeedbackError("Σφάλμα δικτύου.");
-      resetTurnstileFeedback();
     } finally {
       setFeedbackSending(false);
     }
@@ -356,12 +332,6 @@ export default function DownloadPage() {
                       {feedbackMsg.length}/5000 χαρακτήρες
                     </p>
                   </div>
-
-                  {TURNSTILE_SITE_KEY && (
-                    <div className="mb-4">
-                      <div ref={turnstileFeedbackRef} className="flex justify-center" />
-                    </div>
-                  )}
 
                   {feedbackError && (
                     <div className="mb-4 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">

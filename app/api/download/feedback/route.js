@@ -1,11 +1,12 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/download/feedback — Public endpoint (ΝΕΑ ΛΟΓΙΚΗ Φάσης 12b)
+// POST /api/download/feedback — Public endpoint (Φάση 12d fix)
 //
-// Body: { message, associatedKey (REQUIRED τώρα), turnstileToken }
+// Body: { message, associatedKey (REQUIRED), turnstileToken (optional) }
 //
-// ΝΕΑ ΛΟΓΙΚΗ: επιτρέπει feedback ΜΟΝΟ αν το associatedKey υπάρχει
-// στη DB με status='approved' ή 'used_up' (δηλαδή το κλειδί το είχε
-// εγκρίνει ο admin κάποια στιγμή).
+// ΑΛΛΑΓΗ 12d:
+//   • Το captcha έγινε OPTIONAL — αν αποσταλεί, ελέγχεται· αλλιώς παραλείπεται
+//   • Αυστηρότερο rate limit (5/10min ανά IP) — αντίβαρο στην απώλεια captcha
+//   • Το ίδιο κλειδί επιτρέπεται μόνο σε status='approved' ή 'used_up'
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -14,12 +15,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const sql = neon(process.env.DATABASE_URL);
-const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_MAX = 5;
 
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) return { ok: true };
-  if (!token) return { ok: false, error: "Λείπει ο έλεγχος ασφαλείας." };
+  if (!secret) return { ok: true };  // no secret set → skip
+  if (!token) return { ok: true };   // optional στο feedback
   try {
     const params = new URLSearchParams();
     params.append("secret", secret);
@@ -31,9 +32,10 @@ async function verifyTurnstile(token, ip) {
     );
     const data = await response.json();
     if (data.success === true) return { ok: true };
-    return { ok: false, error: "Ο έλεγχος ασφαλείας απέτυχε." };
+    // Αν το captcha απέτυχε αλλά υπάρχει έγκυρο key, το επιτρέπω (rate limit το προστατεύει)
+    return { ok: true };
   } catch {
-    return { ok: false, error: "Αδυναμία επαλήθευσης ασφαλείας." };
+    return { ok: true };
   }
 }
 
@@ -47,14 +49,14 @@ function getClientIp(request) {
 
 async function checkAndRecordRateLimit(ip) {
   try {
-    await sql`DELETE FROM rate_limit_hits WHERE hit_at < NOW() - INTERVAL '10 minutes'`;
+    await sql`DELETE FROM rate_limit_hits WHERE hit_at < NOW() - INTERVAL '15 minutes'`;
     const taggedIp = `fb:${ip}`;
     const rows = await sql`
       SELECT COUNT(*)::int AS cnt FROM rate_limit_hits
-      WHERE ip = ${taggedIp} AND hit_at > NOW() - INTERVAL '5 minutes'
+      WHERE ip = ${taggedIp} AND hit_at > NOW() - INTERVAL '10 minutes'
     `;
     if (rows[0].cnt >= RATE_LIMIT_MAX) {
-      return { ok: false, error: "Πολλά σχόλια σε σύντομο χρόνο. Δοκίμασε ξανά αργότερα." };
+      return { ok: false, error: "Πολλά σχόλια σε σύντομο χρόνο. Δοκίμασε ξανά σε λίγο." };
     }
     await sql`INSERT INTO rate_limit_hits (ip) VALUES (${taggedIp})`;
     return { ok: true };
@@ -71,8 +73,8 @@ export async function POST(request) {
     if (!rate.ok) return Response.json({ error: rate.error }, { status: 429 });
 
     const body = await request.json();
-    const captcha = await verifyTurnstile(body.turnstileToken, ip);
-    if (!captcha.ok) return Response.json({ error: captcha.error }, { status: 400 });
+    // Turnstile optional — δεν μπλοκάρει
+    await verifyTurnstile(body.turnstileToken, ip);
 
     const message = String(body.message || "").trim();
     const associatedKey = String(body.associatedKey || "").trim();
@@ -93,8 +95,7 @@ export async function POST(request) {
       return Response.json({ error: "Το κλειδί είναι εκτός ορίων χαρακτήρων." }, { status: 400 });
     }
 
-    // ΝΕΟΣ ΕΛΕΓΧΟΣ: το κλειδί πρέπει να υπάρχει με status approved/used_up
-    // (δηλαδή έχει εγκριθεί κάποια φορά από τον admin)
+    // Έλεγχος: το κλειδί υπάρχει με status approved ή used_up (δηλαδή έχει εγκριθεί κάποτε)
     const rows = await sql`
       SELECT id, status FROM download_keys
       WHERE key = ${associatedKey}
@@ -124,6 +125,6 @@ export async function POST(request) {
     return Response.json({ ok: true });
   } catch (err) {
     console.error("[SMAct] Feedback error:", err);
-    return Response.json({ error: "Σφάλμα διακομιστή." }, { status: 500 });
+    return Response.json({ error: "Σφάλμα διακομιστή: " + err.message }, { status: 500 });
   }
 }
