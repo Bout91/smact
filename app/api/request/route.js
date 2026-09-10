@@ -140,6 +140,8 @@ export async function POST(request) {
 
     const unit = String(body.unit || "").trim() || null;
     const office = String(body.office || "").trim() || null;
+    // Φάση 12: Προαιρετικό download key
+    const downloadKey = String(body.downloadKey || "").trim() || null;
 
     // Duplicate pickup code
     const existing = await sql`
@@ -154,8 +156,8 @@ export async function POST(request) {
 
     // INSERT request (χωρίς machine_id — μπαίνουν στο request_machines)
     const reqRows = await sql`
-      INSERT INTO requests (pickup_code, unit, office)
-      VALUES (${pickupCode}, ${unit}, ${office})
+      INSERT INTO requests (pickup_code, unit, office, download_key)
+      VALUES (${pickupCode}, ${unit}, ${office}, ${downloadKey})
       RETURNING id, submitted_at
     `;
     const requestId = reqRows[0].id;

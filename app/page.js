@@ -123,23 +123,39 @@ function MainScreen() {
           </p>
 
           <div className="flex flex-col gap-4 items-center">
-            {/* Φάση 9: Νέο κουμπί ΠΑΝΩ από τα άλλα δύο — μοβ/indigo gradient */}
-            <button
-              type="button"
-              onClick={() => router.push("/showcase")}
-              className="group relative w-full sm:w-auto px-8 py-5 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-600 text-white font-semibold text-base shadow-lg shadow-purple-900/60 hover:shadow-xl hover:shadow-purple-900/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 sm:min-w-[540px]"
-            >
-              <span className="flex items-center justify-center gap-3">
-                <span className="text-2xl">✨</span>
-                <span>Τί προσφέρει το Service Manager Pro</span>
-              </span>
-            </button>
+            {/* Φάση 12: 2×2 grid — 4 κουμπιά συνολικά */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-stretch w-full max-w-4xl">
+              {/* Row 1 - Left: Showcase (μοβ) */}
+              <button
+                type="button"
+                onClick={() => router.push("/showcase")}
+                className="group relative flex-1 px-8 py-5 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-600 text-white font-semibold text-base shadow-lg shadow-purple-900/60 hover:shadow-xl hover:shadow-purple-900/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[280px]"
+              >
+                <span className="flex items-center justify-center gap-3">
+                  <span className="text-2xl">✨</span>
+                  <span>Τί προσφέρει το Service Manager Pro</span>
+                </span>
+              </button>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-stretch">
+              {/* Row 1 - Right: Download key (πορτοκαλί) */}
+              <button
+                type="button"
+                onClick={() => router.push("/download")}
+                className="group relative flex-1 px-8 py-5 rounded-2xl bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white font-semibold text-base shadow-lg shadow-orange-900/60 hover:shadow-xl hover:shadow-orange-900/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[280px]"
+              >
+                <span className="flex items-center justify-center gap-3">
+                  <span className="text-2xl">📥</span>
+                  <span>Καταχώρηση κλειδιού για Download Προγράμματος</span>
+                </span>
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-stretch w-full max-w-4xl">
+              {/* Row 2 - Left: Request */}
               <button
                 type="button"
                 onClick={() => router.push("/request")}
-                className="group relative px-8 py-5 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-base shadow-lg shadow-blue-900/50 hover:shadow-xl hover:shadow-blue-900/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
+                className="group relative flex-1 px-8 py-5 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-base shadow-lg shadow-blue-900/50 hover:shadow-xl hover:shadow-blue-900/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[280px]"
               >
                 <span className="flex items-center justify-center gap-3">
                   <span className="text-2xl">🔑</span>
@@ -147,10 +163,11 @@ function MainScreen() {
                 </span>
               </button>
 
+              {/* Row 2 - Right: Search */}
               <button
                 type="button"
                 onClick={() => router.push("/search")}
-                className="group relative px-8 py-5 rounded-2xl bg-slate-800/60 backdrop-blur-sm border-2 border-cyan-500/40 text-cyan-100 font-semibold text-base hover:bg-slate-800/80 hover:border-cyan-400/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[260px]"
+                className="group relative flex-1 px-8 py-5 rounded-2xl bg-slate-800/60 backdrop-blur-sm border-2 border-cyan-500/40 text-cyan-100 font-semibold text-base hover:bg-slate-800/80 hover:border-cyan-400/70 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 min-w-[280px]"
               >
                 <span className="flex items-center justify-center gap-3">
                   <span className="text-2xl">🔍</span>

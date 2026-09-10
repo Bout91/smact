@@ -74,6 +74,7 @@ async function fetchRequestsWithMachines(baseRows) {
           : r.submitted_at,
       readyAt:
         r.ready_at instanceof Date ? r.ready_at.toISOString() : r.ready_at,
+      downloadKey: r.download_key || null,
       machines: list,
       totalMachines: list.length,
       approvedMachines: approvedCount,
@@ -94,7 +95,7 @@ export async function GET(request) {
     if (status === "pending") {
       baseRows = await sql`
         SELECT id, pickup_code, unit, office, status,
-               submitted_at, ready_at
+               submitted_at, ready_at, download_key
         FROM requests
         WHERE status = 'pending'
         ORDER BY submitted_at ASC
@@ -102,7 +103,7 @@ export async function GET(request) {
     } else if (status === "ready") {
       baseRows = await sql`
         SELECT id, pickup_code, unit, office, status,
-               submitted_at, ready_at
+               submitted_at, ready_at, download_key
         FROM requests
         WHERE status = 'ready' AND hidden_from_completed_at IS NULL
         ORDER BY ready_at DESC
@@ -110,7 +111,7 @@ export async function GET(request) {
     } else if (status === "history") {
       baseRows = await sql`
         SELECT id, pickup_code, unit, office, status,
-               submitted_at, ready_at
+               submitted_at, ready_at, download_key
         FROM requests
         WHERE status = 'ready'
         ORDER BY ready_at DESC
@@ -118,7 +119,7 @@ export async function GET(request) {
     } else {
       baseRows = await sql`
         SELECT id, pickup_code, unit, office, status,
-               submitted_at, ready_at
+               submitted_at, ready_at, download_key
         FROM requests
         ORDER BY submitted_at DESC
       `;

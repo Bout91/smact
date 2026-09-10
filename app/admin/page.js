@@ -177,8 +177,8 @@ function AdminDashboard({ onLogout }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const loadRequests = useCallback(async () => {
-    // Στο showcase tab δεν φορτώνουμε αιτήσεις
-    if (tab === "showcase") {
+    // Στα showcase/download tabs δεν φορτώνουμε αιτήσεις
+    if (tab === "showcase" || tab === "download") {
       setLoading(false);
       return;
     }
@@ -422,10 +422,18 @@ function AdminDashboard({ onLogout }) {
             >
               📋 Ξενάγηση
             </TabButton>
+            <TabButton
+              active={tab === "download"}
+              onClick={() => setTab("download")}
+            >
+              📥 Download
+            </TabButton>
           </div>
 
           {tab === "showcase" ? (
             <ShowcaseAdminPanel onUnauthorized={onLogout} />
+          ) : tab === "download" ? (
+            <DownloadAdminPanel onUnauthorized={onLogout} />
           ) : (
             <>
               {isHistory && requests.length > 0 && (
@@ -644,6 +652,19 @@ function RequestCard({
             </div>
           </div>
         </div>
+
+        {/* Φάση 12: Download Key indicator */}
+        {request.downloadKey && (
+          <div className="mb-4 px-3 py-2 bg-amber-500/10 border border-amber-500/40 rounded-lg flex items-center gap-2">
+            <span className="text-amber-300">📥</span>
+            <span className="text-xs text-amber-100">
+              Κατέθεσε Download Key:
+            </span>
+            <code className="text-xs text-amber-200 font-mono font-bold">
+              {request.downloadKey}
+            </code>
+          </div>
+        )}
 
         {/* Machines list */}
         <div className="space-y-2 mb-4">
@@ -1517,6 +1538,299 @@ function ToolbarButton({ children, onClick, title, variant }) {
 
 function ToolbarDivider() {
   return <div className="w-px h-6 bg-slate-700 mx-1" />;
+}
+
+// ─────────────────────────────────────────────────────────
+// Φάση 12: Download Admin Panel — Settings + Feedback
+// ─────────────────────────────────────────────────────────
+function DownloadAdminPanel({ onUnauthorized }) {
+  const [settings, setSettings] = useState({
+    download_drive_url: "",
+    download_contact_message: "",
+    download_contact_details: "",
+  });
+  const [feedback, setFeedback] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [savingKey, setSavingKey] = useState(null);
+  const [savedFlash, setSavedFlash] = useState(null);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const [settingsRes, feedbackRes] = await Promise.all([
+        fetch("/api/admin/settings/get", { credentials: "include", cache: "no-store" }),
+        fetch("/api/admin/feedback/list", { credentials: "include", cache: "no-store" }),
+      ]);
+      if (settingsRes.status === 401 || feedbackRes.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      const settingsData = await settingsRes.json();
+      const feedbackData = await feedbackRes.json();
+      setSettings((prev) => ({ ...prev, ...(settingsData.settings || {}) }));
+      setFeedback(feedbackData.feedback || []);
+      setUnreadCount(feedbackData.unreadCount || 0);
+    } catch {
+      setErrorMsg("Σφάλμα δικτύου.");
+    } finally {
+      setLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  async function saveSetting(key, value) {
+    setSavingKey(key);
+    try {
+      const res = await fetch("/api/admin/settings/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        setSavedFlash(key);
+        setTimeout(() => setSavedFlash(null), 2000);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Σφάλμα αποθήκευσης.");
+      }
+    } catch {
+      alert("Σφάλμα δικτύου.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function markRead(id) {
+    try {
+      await fetch("/api/admin/feedback/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+        credentials: "include",
+      });
+      setFeedback((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, readAt: new Date().toISOString() } : f))
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {}
+  }
+
+  async function deleteFeedback(id) {
+    if (!window.confirm("Διαγραφή αυτού του σχολίου;")) return;
+    try {
+      const res = await fetch("/api/admin/feedback/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        const item = feedback.find((f) => f.id === id);
+        setFeedback((prev) => prev.filter((f) => f.id !== id));
+        if (item && !item.readAt) setUnreadCount((c) => Math.max(0, c - 1));
+      }
+    } catch {}
+  }
+
+  if (loading) {
+    return <div className="text-center text-slate-400 py-12">Φόρτωση...</div>;
+  }
+  if (errorMsg) {
+    return (
+      <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-200 text-sm">
+        {errorMsg}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* ─── Settings section ─── */}
+      <div className="bg-slate-800/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-5 shadow-lg">
+        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <span>⚙️</span>
+          <span>Ρυθμίσεις Download</span>
+        </h3>
+
+        <SettingField
+          label="🔗 Google Drive URL"
+          hint="Ο σύνδεσμος από το Drive όπου έχεις ανεβάσει το Setup αρχείο. Αλλάζει όποτε ανεβάζεις νέα έκδοση."
+          value={settings.download_drive_url}
+          onChange={(v) => setSettings((s) => ({ ...s, download_drive_url: v }))}
+          onSave={() => saveSetting("download_drive_url", settings.download_drive_url)}
+          saving={savingKey === "download_drive_url"}
+          saved={savedFlash === "download_drive_url"}
+          placeholder="https://drive.google.com/file/d/..."
+          mono
+        />
+
+        <SettingField
+          label="💬 Κύριο Μήνυμα Επικοινωνίας"
+          hint="Εμφανίζεται στη σελίδα /download. Αν αφεθεί κενό, βάζει default μήνυμα."
+          value={settings.download_contact_message}
+          onChange={(v) => setSettings((s) => ({ ...s, download_contact_message: v }))}
+          onSave={() => saveSetting("download_contact_message", settings.download_contact_message)}
+          saving={savingKey === "download_contact_message"}
+          saved={savedFlash === "download_contact_message"}
+          placeholder="Για download του Server & του Προγράμματος, παρακαλώ επικοινωνήστε με τον Διαχειριστή"
+          multiline
+        />
+
+        <SettingField
+          label="📞 Στοιχεία Επικοινωνίας (τηλέφωνο / email)"
+          hint="Αν το συμπληρώσεις, θα εμφανίζεται στο τέλος του μηνύματος. Άφησέ το κενό αν δεν θες."
+          value={settings.download_contact_details}
+          onChange={(v) => setSettings((s) => ({ ...s, download_contact_details: v }))}
+          onSave={() => saveSetting("download_contact_details", settings.download_contact_details)}
+          saving={savingKey === "download_contact_details"}
+          saved={savedFlash === "download_contact_details"}
+          placeholder="στο 6999999999 ή στο admin@example.com"
+        />
+      </div>
+
+      {/* ─── Feedback section ─── */}
+      <div className="bg-slate-800/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-5 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <span>💬</span>
+            <span>Σχόλια Χρηστών</span>
+            {unreadCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">
+                {unreadCount} νέα
+              </span>
+            )}
+          </h3>
+          <button
+            type="button"
+            onClick={loadAll}
+            className="px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm transition-colors"
+          >
+            ↻ Ανανέωση
+          </button>
+        </div>
+
+        {feedback.length === 0 ? (
+          <div className="text-center text-slate-500 py-8 text-sm italic">
+            Δεν υπάρχουν σχόλια ακόμα.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+            {feedback.map((f) => (
+              <FeedbackCard
+                key={f.id}
+                feedback={f}
+                onMarkRead={() => markRead(f.id)}
+                onDelete={() => deleteFeedback(f.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingField({ label, hint, value, onChange, onSave, saving, saved, placeholder, mono, multiline }) {
+  const inputClass = `w-full px-3 py-2.5 bg-slate-900/70 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-colors ${mono ? "font-mono" : ""}`;
+
+  return (
+    <div className="mb-5 last:mb-0">
+      <label className="block text-sm font-semibold text-slate-200 mb-1">{label}</label>
+      {hint && <p className="text-xs text-slate-500 mb-2">{hint}</p>}
+      <div className="flex gap-2 items-start">
+        {multiline ? (
+          <textarea
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            rows={2}
+            className={`${inputClass} resize-y flex-1`}
+            maxLength={1900}
+          />
+        ) : (
+          <input
+            type="text"
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className={`${inputClass} flex-1`}
+            maxLength={1900}
+          />
+        )}
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className={`px-4 py-2.5 rounded-lg font-semibold text-sm transition-all flex-shrink-0 ${
+            saved
+              ? "bg-emerald-500 text-white"
+              : "bg-gradient-to-br from-amber-500 to-orange-500 text-white hover:scale-[1.02]"
+          } disabled:opacity-60 disabled:cursor-not-allowed`}
+        >
+          {saving ? "..." : saved ? "✓ OK" : "💾 Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackCard({ feedback, onMarkRead, onDelete }) {
+  const isUnread = !feedback.readAt;
+  const created = new Date(feedback.createdAt).toLocaleString("el-GR");
+
+  return (
+    <div
+      className={`p-3 rounded-lg border ${
+        isUnread
+          ? "bg-blue-500/10 border-blue-500/40"
+          : "bg-slate-900/40 border-slate-700/50"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isUnread && (
+            <span className="px-1.5 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded uppercase tracking-wider">
+              Νέο
+            </span>
+          )}
+          <span className="text-xs text-slate-400">{created}</span>
+          {feedback.associatedKey && (
+            <span className="text-xs text-amber-300 font-mono bg-amber-500/10 px-2 py-0.5 rounded">
+              🔑 {feedback.associatedKey}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {isUnread && (
+            <button
+              type="button"
+              onClick={onMarkRead}
+              className="px-2 py-1 rounded text-xs bg-slate-700/60 hover:bg-slate-700 text-slate-200 font-semibold"
+            >
+              ✓ Διαβάστηκε
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            className="px-2 py-1 rounded text-xs bg-red-500/20 hover:bg-red-500/30 text-red-200 font-semibold"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+      <p className="text-slate-100 text-sm whitespace-pre-wrap break-words">
+        {feedback.message}
+      </p>
+    </div>
+  );
 }
 
 function Background() {

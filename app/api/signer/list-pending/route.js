@@ -54,6 +54,7 @@ export async function POST(request) {
         r.pickup_code    AS pickup_code,
         r.unit           AS unit,
         r.office         AS office,
+        r.download_key   AS download_key,
         r.submitted_at   AS submitted_at,
         rm.id            AS machine_row_id,
         rm.machine_id    AS machine_id,
@@ -74,6 +75,7 @@ export async function POST(request) {
           pickupCode: row.pickup_code,
           unit: row.unit,
           office: row.office,
+          downloadKey: row.download_key || null,
           submittedAt:
             row.submitted_at instanceof Date
               ? row.submitted_at.toISOString()

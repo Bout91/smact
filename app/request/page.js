@@ -30,6 +30,7 @@ export default function RequestPage() {
   const [pickupCode, setPickupCode] = useState("");
   const [unit, setUnit] = useState("");
   const [office, setOffice] = useState("");
+  const [downloadKey, setDownloadKey] = useState(""); // Φάση 12: προαιρετικό
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -158,6 +159,7 @@ export default function RequestPage() {
           pickupCode: pickupCode.trim(),
           unit: unit.trim(),
           office: office.trim(),
+          downloadKey: downloadKey.trim(),
           turnstileToken: turnstileToken,
         }),
       });
@@ -249,6 +251,8 @@ export default function RequestPage() {
                 setUnit={setUnit}
                 office={office}
                 setOffice={setOffice}
+                downloadKey={downloadKey}
+                setDownloadKey={setDownloadKey}
                 onRandomize={handleRandomize}
                 onSubmit={handleSubmit}
                 submitting={submitting}
@@ -279,6 +283,8 @@ function FormCard({
   setUnit,
   office,
   setOffice,
+  downloadKey,
+  setDownloadKey,
   onRandomize,
   onSubmit,
   submitting,
@@ -422,7 +428,7 @@ function FormCard({
         />
       </div>
 
-      <div className="mb-6">
+      <div className="mb-5">
         <label
           htmlFor="office"
           className="block text-sm font-semibold text-slate-200 mb-2"
@@ -441,6 +447,33 @@ function FormCard({
           className="w-full px-4 py-3 bg-slate-900/70 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-colors"
           autoComplete="off"
         />
+      </div>
+
+      {/* Φάση 12: Προαιρετικό download key */}
+      <div className="mb-6">
+        <label
+          htmlFor="downloadKey"
+          className="block text-sm font-semibold text-slate-200 mb-2"
+        >
+          Κλειδί Download{" "}
+          <span className="text-slate-500 font-normal text-xs">
+            (προαιρετικό)
+          </span>
+        </label>
+        <input
+          id="downloadKey"
+          type="text"
+          value={downloadKey}
+          onChange={(e) => setDownloadKey(e.target.value)}
+          placeholder="Αν σου έχει δώσει ο Διαχειριστής κλειδί για download"
+          className="w-full px-4 py-3 bg-slate-900/70 border border-slate-600 rounded-xl text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-colors"
+          autoComplete="off"
+          spellCheck="false"
+        />
+        <p className="text-xs text-slate-500 mt-1.5">
+          Αν έχεις κατεβάσει το πρόγραμμα μέσω κλειδιού Download, βάλε το εδώ ώστε
+          να καταλάβει ο Διαχειριστής ότι σε γνωρίζει.
+        </p>
       </div>
 
       {hasSiteKey && (
