@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { MENU_STRUCTURE, featureKey } from "../lib/menu-structure";
+
+// ─────────────────────────────────────────────────────────
+// Φάση 11 — Promo Video (YouTube unlisted embed)
+// ─────────────────────────────────────────────────────────
+const PROMO_VIDEO_ID = "AOXs5BtaHyI";
+const PROMO_VIDEO_THUMB = `https://img.youtube.com/vi/${PROMO_VIDEO_ID}/mqdefault.jpg`;
+const PROMO_VIDEO_EMBED = `https://www.youtube.com/embed/${PROMO_VIDEO_ID}?rel=0&modestbranding=1&autoplay=1`;
 
 // ─────────────────────────────────────────────────────────
 // Inline Lucide-style icons (viewBox 0 0 24 24, stroke currentColor, strokeWidth 2)
@@ -232,11 +239,28 @@ export default function ShowcasePage() {
   // selected: { mainTabId, subTabId } — τι έχει επιλεγεί για display δεξιά
   const [selected, setSelected] = useState(null);
 
+  // Φάση 11: Promo video state
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [videoMinimized, setVideoMinimized] = useState(false);
+  const [videoMaximized, setVideoMaximized] = useState(false);
+
   const descriptionRef = useRef(null);
+
+  const openVideo = useCallback(() => {
+    setVideoOpen(true);
+    setVideoMinimized(false);
+  }, []);
+  const closeVideo = useCallback(() => {
+    setVideoOpen(false);
+    setVideoMinimized(false);
+    setVideoMaximized(false);
+  }, []);
+  const toggleMinimize = useCallback(() => setVideoMinimized((v) => !v), []);
+  const toggleMaximize = useCallback(() => setVideoMaximized((v) => !v), []);
 
   useEffect(() => {
     let mounted = true;
-    // Φάση 9 fix: cache: "no-store" ώστε ο browser να ζητά πάντα φρέσκα δεδομένα
+    // Cache-busting για να πάρουμε πάντα φρέσκα δεδομένα από το admin
     fetch("/api/features", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
@@ -327,6 +351,9 @@ export default function ShowcasePage() {
                 Επίλεξε υποκαρτέλα για να δεις τι κάνει.
               </p>
             </div>
+
+            {/* Φάση 11: Prominent promo video banner */}
+            <PromoVideoBanner onOpen={openVideo} videoOpen={videoOpen} />
 
             <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-start">
               {/* Sidebar */}
@@ -421,6 +448,27 @@ export default function ShowcasePage() {
           SMAct · Χωρίς αποθήκευση προσωπικών δεδομένων
         </footer>
       </main>
+
+      {/* Φάση 11: Floating Video Button (πάντα ορατό) */}
+      {!videoOpen && <FloatingVideoButton onOpen={openVideo} />}
+
+      {/* Φάση 11: Video Modal (draggable, resizable) */}
+      {videoOpen && !videoMinimized && (
+        <VideoModal
+          maximized={videoMaximized}
+          onClose={closeVideo}
+          onMinimize={toggleMinimize}
+          onToggleMaximize={toggleMaximize}
+        />
+      )}
+
+      {/* Φάση 11: Minimized pill */}
+      {videoOpen && videoMinimized && (
+        <VideoMinimizedPill
+          onRestore={toggleMinimize}
+          onClose={closeVideo}
+        />
+      )}
     </>
   );
 }
@@ -522,6 +570,283 @@ function FeaturePanel({ data }) {
         }
       `}</style>
     </article>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// Φάση 11 — Promo Video Components
+// ─────────────────────────────────────────────────────────
+
+function PromoVideoBanner({ onOpen, videoOpen }) {
+  // Το banner κρύβεται όταν το video παίζει ήδη (για να μην είναι διπλό call to action)
+  if (videoOpen) return null;
+
+  return (
+    <div className="mb-6 promo-banner-glow">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full group relative overflow-hidden rounded-2xl border-2 border-fuchsia-500/40 hover:border-fuchsia-400/80 bg-gradient-to-br from-indigo-900/80 via-purple-900/70 to-fuchsia-900/60 backdrop-blur-md shadow-xl hover:shadow-2xl hover:shadow-fuchsia-900/50 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] text-left"
+      >
+        <div className="flex flex-col sm:flex-row items-center gap-4 p-4 md:p-5">
+          {/* Thumbnail */}
+          <div className="relative flex-shrink-0 w-full sm:w-48 aspect-video rounded-xl overflow-hidden shadow-lg">
+            <img
+              src={PROMO_VIDEO_THUMB}
+              alt="Promo Video"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/10 transition-colors">
+              <div className="w-14 h-14 rounded-full bg-white/95 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                <svg
+                  className="w-7 h-7 text-red-600 ml-1"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Text */}
+          <div className="flex-1 min-w-0 text-center sm:text-left">
+            <div className="text-xs uppercase tracking-widest text-fuchsia-300 font-bold mb-1">
+              🎬 Promo Video
+            </div>
+            <h3 className="text-xl md:text-2xl font-bold text-white mb-1">
+              Δες το Service Manager Pro σε δράση
+            </h3>
+            <p className="text-sm text-slate-300">
+              Ένα σύντομο βίντεο που δείχνει τις κύριες λειτουργίες.
+              Παίζει σε παράθυρο — μπορείς να συνεχίσεις να περιηγείσαι.
+            </p>
+          </div>
+
+          {/* Arrow */}
+          <div className="hidden sm:flex flex-shrink-0 w-10 h-10 items-center justify-center rounded-full bg-fuchsia-500/20 text-fuchsia-200 group-hover:bg-fuchsia-500/40 group-hover:translate-x-1 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </div>
+      </button>
+
+      <style jsx>{`
+        .promo-banner-glow {
+          animation: promoBannerGlow 3s ease-in-out infinite;
+        }
+        @keyframes promoBannerGlow {
+          0%, 100% { filter: drop-shadow(0 0 12px rgba(217, 70, 239, 0.25)); }
+          50% { filter: drop-shadow(0 0 24px rgba(217, 70, 239, 0.55)); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function FloatingVideoButton({ onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="Δες το Promo Video"
+      className="fixed bottom-6 right-6 z-30 flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white font-semibold text-sm shadow-2xl shadow-fuchsia-900/60 hover:scale-105 active:scale-95 transition-all floating-video-btn"
+    >
+      <svg
+        className="w-5 h-5"
+        fill="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path d="M8 5v14l11-7z" />
+      </svg>
+      <span className="hidden sm:inline">Promo Video</span>
+      <style jsx>{`
+        .floating-video-btn {
+          animation: floatBtnPulse 2s ease-in-out infinite;
+        }
+        @keyframes floatBtnPulse {
+          0%, 100% {
+            box-shadow: 0 10px 30px -5px rgba(217, 70, 239, 0.5),
+                        0 0 0 0 rgba(217, 70, 239, 0.5);
+          }
+          50% {
+            box-shadow: 0 10px 30px -5px rgba(217, 70, 239, 0.7),
+                        0 0 0 12px rgba(217, 70, 239, 0);
+          }
+        }
+      `}</style>
+    </button>
+  );
+}
+
+function VideoModal({ maximized, onClose, onMinimize, onToggleMaximize }) {
+  // Draggable state
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [initialized, setInitialized] = useState(false);
+  const dragRef = useRef(null);
+  const dragStateRef = useRef(null);
+
+  // Αρχική τοποθέτηση κεντραρισμένη (μία φορά)
+  useEffect(() => {
+    if (initialized) return;
+    if (typeof window === "undefined") return;
+    const w = 720;
+    const h = 480;
+    const x = Math.max(20, Math.floor((window.innerWidth - w) / 2));
+    const y = Math.max(20, Math.floor((window.innerHeight - h) / 2));
+    setPos({ x, y });
+    setInitialized(true);
+  }, [initialized]);
+
+  const onHeaderMouseDown = useCallback(
+    (e) => {
+      if (maximized) return;
+      // Απόφυγε drag αν πατήθηκε button
+      if (e.target.closest("button")) return;
+      dragStateRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: pos.x,
+        origY: pos.y,
+      };
+      const onMove = (ev) => {
+        if (!dragStateRef.current) return;
+        const dx = ev.clientX - dragStateRef.current.startX;
+        const dy = ev.clientY - dragStateRef.current.startY;
+        const newX = Math.max(
+          -100,
+          Math.min(window.innerWidth - 200, dragStateRef.current.origX + dx)
+        );
+        const newY = Math.max(
+          0,
+          Math.min(window.innerHeight - 60, dragStateRef.current.origY + dy)
+        );
+        setPos({ x: newX, y: newY });
+      };
+      const onUp = () => {
+        dragStateRef.current = null;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [pos, maximized]
+  );
+
+  const style = maximized
+    ? {
+        position: "fixed",
+        top: 20,
+        left: 20,
+        right: 20,
+        bottom: 20,
+        width: "auto",
+        height: "auto",
+        zIndex: 60,
+      }
+    : {
+        position: "fixed",
+        top: pos.y,
+        left: pos.x,
+        width: 720,
+        height: 480,
+        maxWidth: "calc(100vw - 20px)",
+        maxHeight: "calc(100vh - 20px)",
+        zIndex: 60,
+      };
+
+  return (
+    <div
+      style={style}
+      className="bg-slate-900 border border-fuchsia-500/40 rounded-xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden video-modal-anim"
+      ref={dragRef}
+    >
+      {/* Header (drag handle) */}
+      <div
+        onMouseDown={onHeaderMouseDown}
+        className={`flex items-center justify-between px-3 py-2 bg-gradient-to-r from-fuchsia-900/80 to-purple-900/80 border-b border-fuchsia-500/30 select-none ${maximized ? "" : "cursor-move"}`}
+      >
+        <div className="flex items-center gap-2 text-white text-sm font-semibold min-w-0">
+          <span className="text-fuchsia-300">🎬</span>
+          <span className="truncate">Service Manager Pro — Promo</span>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onMinimize}
+            title="Ελαχιστοποίηση"
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-lg leading-none"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={onToggleMaximize}
+            title={maximized ? "Επαναφορά" : "Μεγιστοποίηση"}
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-sm"
+          >
+            {maximized ? "❐" : "☐"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Κλείσιμο"
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-300 hover:bg-red-500/60 hover:text-white transition-colors text-lg leading-none"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* Video body */}
+      <div className="flex-1 bg-black relative overflow-hidden">
+        {initialized && (
+          <iframe
+            src={PROMO_VIDEO_EMBED}
+            title="Service Manager Pro Promo"
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        )}
+      </div>
+
+      <style jsx>{`
+        .video-modal-anim {
+          animation: videoModalIn 0.2s ease-out;
+        }
+        @keyframes videoModalIn {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function VideoMinimizedPill({ onRestore, onClose }) {
+  return (
+    <div className="fixed bottom-6 right-6 z-30 flex items-center gap-2 pl-3 pr-1 py-1.5 rounded-full bg-slate-900 border border-fuchsia-500/50 shadow-2xl">
+      <button
+        type="button"
+        onClick={onRestore}
+        className="flex items-center gap-2 text-white text-sm font-semibold hover:text-fuchsia-200 transition-colors"
+      >
+        <span className="text-fuchsia-300">🎬</span>
+        <span>Promo Video</span>
+        <span className="text-xs text-slate-400">(minimized)</span>
+      </button>
+      <button
+        type="button"
+        onClick={onClose}
+        title="Κλείσιμο"
+        className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:bg-red-500/60 hover:text-white transition-colors text-sm ml-1"
+      >
+        ✕
+      </button>
+    </div>
   );
 }
 
