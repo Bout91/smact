@@ -1,21 +1,42 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/download/feedback — Public endpoint (Φάση 12d fix)
+// POST /api/download/feedback — Public endpoint
 //
 // Body: { message, associatedKey (REQUIRED), turnstileToken (optional) }
 //
-// ΑΛΛΑΓΗ 12d:
+// Φάση 12d:
 //   • Το captcha έγινε OPTIONAL — αν αποσταλεί, ελέγχεται· αλλιώς παραλείπεται
 //   • Αυστηρότερο rate limit (5/10min ανά IP) — αντίβαρο στην απώλεια captcha
 //   • Το ίδιο κλειδί επιτρέπεται μόνο σε status='approved' ή 'used_up'
+//
+// Φάση 12e HOTFIX:
+//   • Προστέθηκε ntfy push notification στον admin όταν φτάνει νέο σχόλιο
+//   • Επιστρέφει και το id του νέου σχολίου για επιβεβαίωση insert
+//   • Ρητά NO-STORE headers
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const sql = neon(process.env.DATABASE_URL);
 const RATE_LIMIT_MAX = 5;
+
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Netlify-CDN-Cache-Control": "no-store",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
+function jsonWithNoCache(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...NO_CACHE_HEADERS },
+  });
+}
 
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -65,12 +86,33 @@ async function checkAndRecordRateLimit(ip) {
   }
 }
 
+// Φάση 12e: Push notification στον admin μέσω ntfy
+async function sendAdminFeedbackNotification(keyPrefix, messagePreview) {
+  const topic = process.env.NTFY_TOPIC;
+  if (!topic) return;
+  try {
+    await fetch("https://ntfy.sh/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic,
+        title: "💬 SMAct: Νέο σχόλιο από χρήστη",
+        message: `Από κλειδί: ${keyPrefix}…\n"${messagePreview}"`,
+        priority: 3,
+        tags: ["speech_balloon"],
+      }),
+    });
+  } catch {
+    // silent — δεν χαλάει το σχόλιο αν αποτύχει το push
+  }
+}
+
 export async function POST(request) {
   try {
     const ip = getClientIp(request);
 
     const rate = await checkAndRecordRateLimit(ip);
-    if (!rate.ok) return Response.json({ error: rate.error }, { status: 429 });
+    if (!rate.ok) return jsonWithNoCache({ error: rate.error }, 429);
 
     const body = await request.json();
     // Turnstile optional — δεν μπλοκάρει
@@ -80,19 +122,19 @@ export async function POST(request) {
     const associatedKey = String(body.associatedKey || "").trim();
 
     if (!associatedKey) {
-      return Response.json(
+      return jsonWithNoCache(
         { error: "Πρέπει να καταχωρήσεις το Κλειδί Download που έχεις πάρει." },
-        { status: 400 }
+        400
       );
     }
     if (!message) {
-      return Response.json({ error: "Πρέπει να γράψεις κάποιο σχόλιο." }, { status: 400 });
+      return jsonWithNoCache({ error: "Πρέπει να γράψεις κάποιο σχόλιο." }, 400);
     }
     if (message.length > 5000) {
-      return Response.json({ error: "Το σχόλιο είναι πολύ μεγάλο (max 5000 χαρακτήρες)." }, { status: 400 });
+      return jsonWithNoCache({ error: "Το σχόλιο είναι πολύ μεγάλο (max 5000 χαρακτήρες)." }, 400);
     }
     if (associatedKey.length > 100 || associatedKey.length < 8) {
-      return Response.json({ error: "Το κλειδί είναι εκτός ορίων χαρακτήρων." }, { status: 400 });
+      return jsonWithNoCache({ error: "Το κλειδί είναι εκτός ορίων χαρακτήρων." }, 400);
     }
 
     // Έλεγχος: το κλειδί υπάρχει με status approved ή used_up (δηλαδή έχει εγκριθεί κάποτε)
@@ -102,29 +144,40 @@ export async function POST(request) {
       LIMIT 1
     `;
     if (rows.length === 0) {
-      return Response.json(
+      return jsonWithNoCache(
         { error: "Το κλειδί που έδωσες δεν είναι έγκυρο." },
-        { status: 403 }
+        403
       );
     }
     const validStatuses = new Set(["approved", "used_up"]);
     if (!validStatuses.has(rows[0].status)) {
-      return Response.json(
+      return jsonWithNoCache(
         { error: "Το κλειδί σου δεν έχει εγκριθεί ακόμα. Σχόλια μπορούν να στέλνουν μόνο όσοι έχουν εγκεκριμένο κλειδί." },
-        { status: 403 }
+        403
       );
     }
 
-    await sql`
+    // Insert + πάρε πίσω το id για να ξέρουμε ότι όντως γράφτηκε
+    const inserted = await sql`
       INSERT INTO download_feedback (associated_key, message, ip)
       VALUES (${associatedKey}, ${message}, ${ip})
+      RETURNING id
     `;
 
-    console.log("[SMAct] Feedback received:", { keyPrefix: associatedKey.substring(0, 6), len: message.length });
+    const newId = inserted[0]?.id;
+    console.log("[SMAct] Feedback received:", {
+      id: newId,
+      keyPrefix: associatedKey.substring(0, 6),
+      len: message.length,
+    });
 
-    return Response.json({ ok: true });
+    // Push notification — fire-and-forget, δεν καθυστερεί την απάντηση στον user
+    const preview = message.length > 120 ? message.substring(0, 117) + "..." : message;
+    sendAdminFeedbackNotification(associatedKey.substring(0, 8), preview).catch(() => {});
+
+    return jsonWithNoCache({ ok: true, id: newId });
   } catch (err) {
     console.error("[SMAct] Feedback error:", err);
-    return Response.json({ error: "Σφάλμα διακομιστή: " + err.message }, { status: 500 });
+    return jsonWithNoCache({ error: "Σφάλμα διακομιστή: " + err.message }, 500);
   }
 }

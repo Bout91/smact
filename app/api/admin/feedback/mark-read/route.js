@@ -1,13 +1,25 @@
-// POST /api/admin/feedback/mark-read — admin only
-// Body: { id } — mark a feedback entry as read
+// ─────────────────────────────────────────────────────────
+// POST /api/admin/feedback/mark-read — admin only. Body: { id }
+//
+// Φάση 12e HOTFIX: Ρητά NO-STORE headers.
+// ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const COOKIE_NAME = "smact_admin";
 const sql = neon(process.env.DATABASE_URL);
+
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Netlify-CDN-Cache-Control": "no-store",
+  Pragma: "no-cache",
+  Expires: "0",
+};
 
 function safeEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
@@ -28,20 +40,27 @@ function isAdmin(request) {
   return safeEqual(decodeURIComponent(match[1]), adminPassword);
 }
 
+function jsonWithNoCache(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...NO_CACHE_HEADERS },
+  });
+}
+
 export async function POST(request) {
   if (!isAdmin(request)) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return jsonWithNoCache({ error: "Unauthorized" }, 401);
   }
   try {
     const body = await request.json();
     const id = String(body.id || "").trim();
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
-      return Response.json({ error: "Λάθος id." }, { status: 400 });
+      return jsonWithNoCache({ error: "Λάθος id." }, 400);
     }
     await sql`UPDATE download_feedback SET read_at = NOW() WHERE id = ${id} AND read_at IS NULL`;
-    return Response.json({ ok: true });
+    return jsonWithNoCache({ ok: true });
   } catch (err) {
     console.error("[SMAct] Mark read error:", err);
-    return Response.json({ error: "Σφάλμα διακομιστή." }, { status: 500 });
+    return jsonWithNoCache({ error: "Σφάλμα διακομιστή: " + err.message }, 500);
   }
 }

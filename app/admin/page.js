@@ -1814,13 +1814,39 @@ function DownloadAdminPanel({ onUnauthorized }) {
   const [savingKey, setSavingKey] = useState(null);
   const [savedFlash, setSavedFlash] = useState(null);
 
+  // Φάση 12e HOTFIX: cache-buster στα URLs + explicit no-cache headers
+  const NO_CACHE_FETCH = {
+    credentials: "include",
+    cache: "no-store",
+    headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+  };
+
+  const reloadFeedback = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/admin/feedback/list?t=${Date.now()}`,
+        NO_CACHE_FETCH
+      );
+      if (res.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      const data = await res.json();
+      setFeedback(data.feedback || []);
+      setUnreadCount(data.unreadCount || 0);
+    } catch {
+      // silent — δεν χαλάει την υπόλοιπη σελίδα
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onUnauthorized]);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
     try {
       const [settingsRes, feedbackRes] = await Promise.all([
-        fetch("/api/admin/settings/get", { credentials: "include", cache: "no-store" }),
-        fetch("/api/admin/feedback/list", { credentials: "include", cache: "no-store" }),
+        fetch(`/api/admin/settings/get?t=${Date.now()}`, NO_CACHE_FETCH),
+        fetch(`/api/admin/feedback/list?t=${Date.now()}`, NO_CACHE_FETCH),
       ]);
       if (settingsRes.status === 401 || feedbackRes.status === 401) {
         onUnauthorized();
@@ -1836,11 +1862,21 @@ function DownloadAdminPanel({ onUnauthorized }) {
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onUnauthorized]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Φάση 12e HOTFIX: Auto-refresh των σχολίων κάθε 30s ώστε νέα σχόλια
+  // να εμφανίζονται χωρίς manual reload. Δεν αγγίζει τα settings.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      reloadFeedback();
+    }, 30000);
+    return () => clearInterval(iv);
+  }, [reloadFeedback]);
 
   async function saveSetting(key, value) {
     setSavingKey(key);
@@ -1867,11 +1903,16 @@ function DownloadAdminPanel({ onUnauthorized }) {
 
   async function markRead(id) {
     try {
-      await fetch("/api/admin/feedback/mark-read", {
+      await fetch(`/api/admin/feedback/mark-read?t=${Date.now()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
         body: JSON.stringify({ id }),
         credentials: "include",
+        cache: "no-store",
       });
       setFeedback((prev) =>
         prev.map((f) => (f.id === id ? { ...f, readAt: new Date().toISOString() } : f))
@@ -1883,16 +1924,24 @@ function DownloadAdminPanel({ onUnauthorized }) {
   async function deleteFeedback(id) {
     if (!window.confirm("Διαγραφή αυτού του σχολίου;")) return;
     try {
-      const res = await fetch("/api/admin/feedback/delete", {
+      const res = await fetch(`/api/admin/feedback/delete?t=${Date.now()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
         body: JSON.stringify({ id }),
         credentials: "include",
+        cache: "no-store",
       });
       if (res.ok) {
         const item = feedback.find((f) => f.id === id);
         setFeedback((prev) => prev.filter((f) => f.id !== id));
         if (item && !item.readAt) setUnreadCount((c) => Math.max(0, c - 1));
+        // Φάση 12e HOTFIX: Force full reload μετά από delete ώστε να μη
+        // βλέπουμε ποτέ stale entry σε επόμενη ανανέωση
+        setTimeout(() => reloadFeedback(), 500);
       }
     } catch {}
   }
@@ -1967,7 +2016,7 @@ function DownloadAdminPanel({ onUnauthorized }) {
           </h3>
           <button
             type="button"
-            onClick={loadAll}
+            onClick={reloadFeedback}
             className="px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-sm transition-colors"
           >
             ↻ Ανανέωση
