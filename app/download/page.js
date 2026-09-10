@@ -18,7 +18,8 @@ export default function DownloadPage() {
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null); // { status, message, downloadUrl }
 
-  // Feedback state
+  // Feedback state — υποχρεωτικό ξεχωριστό key
+  const [feedbackKey, setFeedbackKey] = useState("");
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackDone, setFeedbackDone] = useState(false);
@@ -132,6 +133,10 @@ export default function DownloadPage() {
   async function handleFeedback(e) {
     e.preventDefault();
     setFeedbackError("");
+    if (!feedbackKey.trim()) {
+      setFeedbackError("Πρέπει να καταχωρήσεις το Κλειδί Download που έχεις πάρει.");
+      return;
+    }
     if (!feedbackMsg.trim()) return;
     if (TURNSTILE_SITE_KEY && !tokenFeedback) {
       setFeedbackError("Ολοκλήρωσε τον έλεγχο ασφαλείας (captcha).");
@@ -144,7 +149,7 @@ export default function DownloadPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: feedbackMsg.trim(),
-          associatedKey: downloadKey.trim() || null,
+          associatedKey: feedbackKey.trim(),
           turnstileToken: tokenFeedback,
         }),
       });
@@ -162,6 +167,12 @@ export default function DownloadPage() {
     } finally {
       setFeedbackSending(false);
     }
+  }
+
+  function resetFeedbackForm() {
+    setFeedbackDone(false);
+    setFeedbackMsg("");
+    // Άφησε το feedbackKey γεμάτο — μπορεί να στείλει και δεύτερο σχόλιο
   }
 
   const defaultContactMsg = "Για download του Server & του Προγράμματος, παρακαλώ επικοινώνησε με τον Διαχειριστή.";
@@ -292,8 +303,8 @@ export default function DownloadPage() {
                 <span>Σχόλια / Αναφορά Bug / Προτάσεις</span>
               </h2>
               <p className="text-slate-400 text-sm mb-5">
-                Έχεις κάποιο πρόβλημα με το πρόγραμμα ή πρόταση βελτίωσης; Γράψε εδώ —
-                θα φτάσει απευθείας στον Διαχειριστή.
+                <span className="text-amber-300 font-semibold">Μόνο όσοι έχουν εγκεκριμένο Κλειδί Download</span>{" "}
+                μπορούν να στείλουν σχόλια. Καταχώρησε το κλειδί σου + το σχόλιό σου.
               </p>
 
               {feedbackDone ? (
@@ -303,7 +314,7 @@ export default function DownloadPage() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setFeedbackDone(false)}
+                    onClick={resetFeedbackForm}
                     className="mt-2 text-xs text-emerald-300 hover:text-emerald-100 underline"
                   >
                     Στείλε άλλο σχόλιο
@@ -313,7 +324,25 @@ export default function DownloadPage() {
                 <>
                   <div className="mb-4">
                     <label className="block text-sm font-semibold text-slate-200 mb-2">
-                      Το σχόλιό σου
+                      Κλειδί Download <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={feedbackKey}
+                      onChange={(e) => setFeedbackKey(e.target.value)}
+                      placeholder="Το εγκεκριμένο κλειδί που έχεις πάρει"
+                      className="w-full px-4 py-3 bg-slate-900/70 border border-slate-600 rounded-xl text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-colors"
+                      autoComplete="off"
+                      spellCheck="false"
+                    />
+                    <p className="text-xs text-slate-500 mt-1.5">
+                      Θα ελεγχθεί από το σύστημα. Χωρίς έγκυρο κλειδί το σχόλιο δεν στέλνεται.
+                    </p>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-semibold text-slate-200 mb-2">
+                      Το σχόλιό σου <span className="text-red-400">*</span>
                     </label>
                     <textarea
                       value={feedbackMsg}
@@ -325,14 +354,6 @@ export default function DownloadPage() {
                     />
                     <p className="text-xs text-slate-500 mt-1">
                       {feedbackMsg.length}/5000 χαρακτήρες
-                      {downloadKey.trim() && (
-                        <>
-                          {" · "}
-                          <span className="text-amber-300">
-                            Θα σταλθεί συνδεδεμένο με το κλειδί: {downloadKey.trim().substring(0, 6)}…
-                          </span>
-                        </>
-                      )}
                     </p>
                   </div>
 
@@ -350,7 +371,7 @@ export default function DownloadPage() {
 
                   <button
                     type="submit"
-                    disabled={feedbackSending || !feedbackMsg.trim()}
+                    disabled={feedbackSending || !feedbackMsg.trim() || !feedbackKey.trim()}
                     className="w-full px-6 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {feedbackSending ? "Αποστολή..." : "📤 Αποστολή Σχολίου"}

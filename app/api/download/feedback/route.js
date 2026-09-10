@@ -1,6 +1,11 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/download/feedback — Public endpoint
-// Body: { message, associatedKey (optional), turnstileToken }
+// POST /api/download/feedback — Public endpoint (ΝΕΑ ΛΟΓΙΚΗ Φάσης 12b)
+//
+// Body: { message, associatedKey (REQUIRED τώρα), turnstileToken }
+//
+// ΝΕΑ ΛΟΓΙΚΗ: επιτρέπει feedback ΜΟΝΟ αν το associatedKey υπάρχει
+// στη DB με status='approved' ή 'used_up' (δηλαδή το κλειδί το είχε
+// εγκρίνει ο admin κάποια στιγμή).
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -9,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const sql = neon(process.env.DATABASE_URL);
-const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_MAX = 10;
 
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -43,14 +48,15 @@ function getClientIp(request) {
 async function checkAndRecordRateLimit(ip) {
   try {
     await sql`DELETE FROM rate_limit_hits WHERE hit_at < NOW() - INTERVAL '10 minutes'`;
+    const taggedIp = `fb:${ip}`;
     const rows = await sql`
       SELECT COUNT(*)::int AS cnt FROM rate_limit_hits
-      WHERE ip = ${ip} AND hit_at > NOW() - INTERVAL '5 minutes'
+      WHERE ip = ${taggedIp} AND hit_at > NOW() - INTERVAL '5 minutes'
     `;
     if (rows[0].cnt >= RATE_LIMIT_MAX) {
       return { ok: false, error: "Πολλά σχόλια σε σύντομο χρόνο. Δοκίμασε ξανά αργότερα." };
     }
-    await sql`INSERT INTO rate_limit_hits (ip) VALUES (${ip})`;
+    await sql`INSERT INTO rate_limit_hits (ip) VALUES (${taggedIp})`;
     return { ok: true };
   } catch {
     return { ok: true };
@@ -69,16 +75,43 @@ export async function POST(request) {
     if (!captcha.ok) return Response.json({ error: captcha.error }, { status: 400 });
 
     const message = String(body.message || "").trim();
-    const associatedKey = String(body.associatedKey || "").trim() || null;
+    const associatedKey = String(body.associatedKey || "").trim();
 
+    if (!associatedKey) {
+      return Response.json(
+        { error: "Πρέπει να καταχωρήσεις το Κλειδί Download που έχεις πάρει." },
+        { status: 400 }
+      );
+    }
     if (!message) {
       return Response.json({ error: "Πρέπει να γράψεις κάποιο σχόλιο." }, { status: 400 });
     }
     if (message.length > 5000) {
       return Response.json({ error: "Το σχόλιο είναι πολύ μεγάλο (max 5000 χαρακτήρες)." }, { status: 400 });
     }
-    if (associatedKey && associatedKey.length > 100) {
-      return Response.json({ error: "Το κλειδί είναι πολύ μεγάλο." }, { status: 400 });
+    if (associatedKey.length > 100 || associatedKey.length < 8) {
+      return Response.json({ error: "Το κλειδί είναι εκτός ορίων χαρακτήρων." }, { status: 400 });
+    }
+
+    // ΝΕΟΣ ΕΛΕΓΧΟΣ: το κλειδί πρέπει να υπάρχει με status approved/used_up
+    // (δηλαδή έχει εγκριθεί κάποια φορά από τον admin)
+    const rows = await sql`
+      SELECT id, status FROM download_keys
+      WHERE key = ${associatedKey}
+      LIMIT 1
+    `;
+    if (rows.length === 0) {
+      return Response.json(
+        { error: "Το κλειδί που έδωσες δεν είναι έγκυρο." },
+        { status: 403 }
+      );
+    }
+    const validStatuses = new Set(["approved", "used_up"]);
+    if (!validStatuses.has(rows[0].status)) {
+      return Response.json(
+        { error: "Το κλειδί σου δεν έχει εγκριθεί ακόμα. Σχόλια μπορούν να στέλνουν μόνο όσοι έχουν εγκεκριμένο κλειδί." },
+        { status: 403 }
+      );
     }
 
     await sql`
@@ -86,7 +119,7 @@ export async function POST(request) {
       VALUES (${associatedKey}, ${message}, ${ip})
     `;
 
-    console.log("[SMAct] Feedback received:", { keyPrefix: associatedKey?.substring(0, 6), len: message.length });
+    console.log("[SMAct] Feedback received:", { keyPrefix: associatedKey.substring(0, 6), len: message.length });
 
     return Response.json({ ok: true });
   } catch (err) {

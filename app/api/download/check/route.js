@@ -1,14 +1,18 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/download/check — Public endpoint
+// POST /api/download/check — Public endpoint (ΝΕΑ ΛΟΓΙΚΗ Φάσης 12b)
+//
 // Body: { downloadKey, turnstileToken }
 //
-// Λογική:
-//   • Αν κλειδί δεν υπάρχει     → INSERT status='pending', επιστροφή { status: 'pending' }
-//   • Αν status='pending'       → UPDATE last_seen_at, επιστροφή { status: 'pending' }
-//   • Αν status='approved'      → return { status: 'ok', downloadUrl }
-//        (single-use: use_count++ και status='used_up' αν φτάσουμε στο max)
-//   • Αν status='used_up'       → return { status: 'used_up' }
-//   • Αν status='rejected'      → return { status: 'rejected' }
+// ΝΕΑ ΛΟΓΙΚΗ (anti-fraud):
+//   • Αν το κλειδί ΔΕΝ υπάρχει στη DB (δεν έγινε pre-approved από admin)
+//       → REJECT «Το κλειδί δεν είναι έγκυρο.» Τίποτα δεν αποθηκεύεται.
+//   • Αν status='preauth' (admin το δημιούργησε)
+//       → UPDATE σε 'pending' (user το εισήγαγε), notify admin, return "pending"
+//   • Αν status='pending' (user το είχε ήδη εισάγει)
+//       → UPDATE last_seen_at, return "pending"
+//   • Αν status='approved' → return download URL (και update use_count)
+//   • Αν status='used_up' → return "already used"
+//   • Αν status='rejected' → return "not valid"
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
@@ -17,7 +21,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const sql = neon(process.env.DATABASE_URL);
-const RATE_LIMIT_MAX = 15;
+const RATE_LIMIT_MAX = 30;
 
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -48,17 +52,19 @@ function getClientIp(request) {
   return "unknown";
 }
 
-async function checkAndRecordRateLimit(ip) {
+async function checkAndRecordRateLimit(ip, tag) {
   try {
     await sql`DELETE FROM rate_limit_hits WHERE hit_at < NOW() - INTERVAL '10 minutes'`;
+    // Χρησιμοποιώ tagged ip για να μη μπερδεύεται feedback rate limit με check rate limit
+    const taggedIp = `${tag}:${ip}`;
     const rows = await sql`
       SELECT COUNT(*)::int AS cnt FROM rate_limit_hits
-      WHERE ip = ${ip} AND hit_at > NOW() - INTERVAL '1 minute'
+      WHERE ip = ${taggedIp} AND hit_at > NOW() - INTERVAL '1 minute'
     `;
     if (rows[0].cnt >= RATE_LIMIT_MAX) {
-      return { ok: false, error: "Πολλές αιτήσεις. Δοκίμασε ξανά σε 1 λεπτό." };
+      return { ok: false, error: "Πολλές αιτήσεις σε σύντομο χρόνο. Δοκίμασε ξανά σε 1 λεπτό." };
     }
-    await sql`INSERT INTO rate_limit_hits (ip) VALUES (${ip})`;
+    await sql`INSERT INTO rate_limit_hits (ip) VALUES (${taggedIp})`;
     return { ok: true };
   } catch {
     return { ok: true };
@@ -74,8 +80,8 @@ async function sendAdminNotification(downloadKey) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         topic,
-        title: "🔔 SMAct: Νέο αίτημα Download Key",
-        message: `Κλειδί: ${downloadKey.substring(0, 8)}…\nΈλεγξέ το στο SM Key Signer.`,
+        title: "🔔 SMAct: Έγκυρο κλειδί Download περιμένει έγκριση",
+        message: `Κλειδί: ${downloadKey.substring(0, 8)}…\nΈλεγξέ το στο SM Key Signer → Downloads.`,
         priority: 2,
         tags: ["arrow_down"],
       }),
@@ -87,7 +93,7 @@ export async function POST(request) {
   try {
     const ip = getClientIp(request);
 
-    const rate = await checkAndRecordRateLimit(ip);
+    const rate = await checkAndRecordRateLimit(ip, "dlcheck");
     if (!rate.ok) return Response.json({ error: rate.error }, { status: 429 });
 
     const body = await request.json();
@@ -105,7 +111,7 @@ export async function POST(request) {
       return Response.json({ error: "Το κλειδί είναι πολύ μεγάλο." }, { status: 400 });
     }
 
-    // Έλεγξε αν το κλειδί υπάρχει ήδη
+    // Έλεγξε αν το κλειδί υπάρχει
     const existing = await sql`
       SELECT id, key, status, multi_use, use_count, max_uses
       FROM download_keys
@@ -114,27 +120,35 @@ export async function POST(request) {
     `;
 
     if (existing.length === 0) {
-      // Νέο κλειδί — δημιούργησέ το ως pending, στείλε ειδοποίηση στον admin
-      await sql`
-        INSERT INTO download_keys (key, status, first_seen_at, last_seen_at)
-        VALUES (${downloadKey}, 'pending', NOW(), NOW())
-      `;
-      await sendAdminNotification(downloadKey);
+      // ΝΕΑ ΛΟΓΙΚΗ: αν το κλειδί δεν υπάρχει στα pre-approved, απόρριψη — ΤΙΠΟΤΑ δεν αποθηκεύεται
       return Response.json({
-        status: "pending",
-        message: "Το αίτημά σου στάλθηκε για έγκριση. Επικοινώνησε με τον Διαχειριστή αν δεν το έχεις ήδη κάνει, και ξαναπροσπάθησε σε λίγο.",
+        status: "rejected",
+        message: "Το κλειδί δεν είναι έγκυρο. Επικοινώνησε με τον Διαχειριστή για να πάρεις κλειδί.",
       });
     }
 
     const row = existing[0];
 
-    // Ενημέρωσε το last_seen_at σε κάθε είσοδο
-    await sql`UPDATE download_keys SET last_seen_at = NOW() WHERE id = ${row.id}`;
-
-    if (row.status === "pending") {
+    if (row.status === "preauth") {
+      // Πρώτη εισαγωγή έγκυρου κλειδιού από user — μεταβαίνει σε pending, ειδοποίηση admin
+      await sql`
+        UPDATE download_keys
+        SET status = 'pending', last_seen_at = NOW()
+        WHERE id = ${row.id}
+      `;
+      await sendAdminNotification(downloadKey);
       return Response.json({
         status: "pending",
-        message: "Το κλειδί σου είναι σε αναμονή έγκρισης από τον Διαχειριστή. Ξαναδοκίμασε αργότερα.",
+        message: "Το κλειδί σου είναι έγκυρο! Δημιουργήθηκε αίτημα. Αναμένεται έγκριση από τον Διαχειριστή για download. Ξαναδοκίμασε αργότερα.",
+      });
+    }
+
+    if (row.status === "pending") {
+      // Επανείσοδος - update last_seen_at
+      await sql`UPDATE download_keys SET last_seen_at = NOW() WHERE id = ${row.id}`;
+      return Response.json({
+        status: "pending",
+        message: "Το κλειδί σου είναι σε αναμονή τελικής έγκρισης από τον Διαχειριστή. Ξαναδοκίμασε αργότερα.",
       });
     }
 
@@ -165,14 +179,11 @@ export async function POST(request) {
         );
       }
 
-      // Handle use_count / status transitions
       let newStatus = "approved";
       const newUseCount = row.use_count + 1;
       if (!row.multi_use) {
-        // Single-use: αμέσως γίνεται used_up
         newStatus = "used_up";
       } else if (row.max_uses && newUseCount >= row.max_uses) {
-        // Multi-use με όριο: αν φτάσει το όριο, γίνεται used_up
         newStatus = "used_up";
       }
 
@@ -180,7 +191,8 @@ export async function POST(request) {
         UPDATE download_keys
         SET use_count = ${newUseCount},
             last_download_at = NOW(),
-            status = ${newStatus}
+            status = ${newStatus},
+            last_seen_at = NOW()
         WHERE id = ${row.id}
       `;
 
@@ -191,7 +203,6 @@ export async function POST(request) {
       });
     }
 
-    // Fallback (shouldn't happen)
     return Response.json({ status: "unknown", message: "Άγνωστη κατάσταση." });
   } catch (err) {
     console.error("[SMAct] Download check error:", err);

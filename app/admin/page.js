@@ -480,20 +480,50 @@ function AdminDashboard({ onLogout }) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {requests.map((r) => (
-                    <RequestCard
-                      key={r.id}
-                      request={r}
-                      onApproveMachine={(machine) =>
-                        setApproveTarget({ request: r, machine })
-                      }
-                      onDelete={() => setDeleteTarget(r)}
-                      showCheckbox={isHistory}
-                      checked={selectedIds.has(r.id)}
-                      onToggleCheck={() => toggleOne(r.id)}
-                      hideActions={isHistory}
-                    />
-                  ))}
+                  {requests.map((r) =>
+                    r.type === "download" ? (
+                      <DownloadRequestCard
+                        key={"dl-" + r.id}
+                        request={r}
+                        onRefresh={loadRequests}
+                        hideActions={isHistory}
+                      />
+                    ) : (
+                      <RequestCard
+                        key={r.id}
+                        request={r}
+                        onApproveMachine={(machine) =>
+                          setApproveTarget({ request: r, machine })
+                        }
+                        onRejectMachine={async (machine) => {
+                          if (!window.confirm(
+                            `Απόρριψη του machine-id "${machine.machineId.substring(0, 12)}…"; Θα διαγραφεί από την αίτηση.`
+                          )) return;
+                          try {
+                            const res = await fetch("/api/admin/reject", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ requestId: r.id, machineRowId: machine.id }),
+                              credentials: "include",
+                            });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              alert(data.error || "Σφάλμα.");
+                            } else {
+                              await loadRequests();
+                            }
+                          } catch {
+                            alert("Σφάλμα δικτύου.");
+                          }
+                        }}
+                        onDelete={() => setDeleteTarget(r)}
+                        showCheckbox={isHistory}
+                        checked={selectedIds.has(r.id)}
+                        onToggleCheck={() => toggleOne(r.id)}
+                        hideActions={isHistory}
+                      />
+                    )
+                  )}
                 </div>
               )}
             </>
@@ -560,6 +590,7 @@ function TabButton({ active, onClick, children }) {
 function RequestCard({
   request,
   onApproveMachine,
+  onRejectMachine,
   onDelete,
   showCheckbox,
   checked,
@@ -674,6 +705,7 @@ function RequestCard({
               index={idx}
               machine={m}
               onApprove={() => onApproveMachine(m)}
+              onReject={() => onRejectMachine(m)}
               hideActions={hideActions}
             />
           ))}
@@ -695,7 +727,7 @@ function RequestCard({
   );
 }
 
-function MachineRow({ index, machine, onApprove, hideActions }) {
+function MachineRow({ index, machine, onApprove, onReject, hideActions }) {
   const [copied, setCopied] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const isReady = !!machine.activationKey;
@@ -780,17 +812,29 @@ function MachineRow({ index, machine, onApprove, hideActions }) {
       )}
 
       {!hideActions && (
-        <button
-          type="button"
-          onClick={onApprove}
-          className={`w-full px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
-            isReady
-              ? "bg-slate-700/60 hover:bg-slate-700 text-slate-200"
-              : "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white hover:scale-[1.01] active:scale-[0.99] shadow"
-          }`}
-        >
-          {isReady ? "↻ Αντικατάσταση κλειδιού" : "✓ Έγκριση αυτού"}
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={onApprove}
+            className={`flex-1 px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
+              isReady
+                ? "bg-slate-700/60 hover:bg-slate-700 text-slate-200"
+                : "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white hover:scale-[1.01] active:scale-[0.99] shadow"
+            }`}
+          >
+            {isReady ? "↻ Αντικατάσταση κλειδιού" : "✓ Έγκριση αυτού"}
+          </button>
+          {!isReady && onReject && (
+            <button
+              type="button"
+              onClick={onReject}
+              title="Απόρριψη αυτού του machine-id (διαγραφή)"
+              className="px-3 py-1.5 rounded-md font-semibold text-xs bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 transition-colors"
+            >
+              ✗ Απόρριψη
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1543,6 +1587,127 @@ function ToolbarDivider() {
 // ─────────────────────────────────────────────────────────
 // Φάση 12: Download Admin Panel — Settings + Feedback
 // ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// Φάση 12b: DownloadRequestCard — για download requests στα tabs Εκκρεμείς/Ολοκληρωμένες/Ιστορικό
+// (πορτοκαλί background για να ξεχωρίζει από activation requests)
+// ─────────────────────────────────────────────────────────
+function DownloadRequestCard({ request, onRefresh, hideActions }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyKey() {
+    try {
+      await navigator.clipboard.writeText(request.key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  }
+
+  async function rejectKey() {
+    if (!window.confirm(`Απόρριψη του Download Key "${request.key.substring(0, 12)}…";`)) return;
+    try {
+      const res = await fetch("/api/admin/download-reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: request.key }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        onRefresh?.();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Σφάλμα.");
+      }
+    } catch {
+      alert("Σφάλμα δικτύου.");
+    }
+  }
+
+  const statusColors = {
+    pending:  "border-orange-500/40 bg-orange-500/10",
+    approved: "border-emerald-500/40 bg-emerald-500/10",
+    used_up:  "border-slate-500/40 bg-slate-500/10",
+    rejected: "border-red-500/40 bg-red-500/10",
+  };
+  const statusLabels = {
+    pending:  "⏳ Εκκρεμεί (Download)",
+    approved: "✅ Εγκεκριμένο (Download)",
+    used_up:  "🔒 Χρησιμοποιήθηκε (Download)",
+    rejected: "✗ Απορρίφθηκε (Download)",
+  };
+
+  const submittedAt = new Date(request.submittedAt).toLocaleString("el-GR");
+  const approvedAt = request.approvedAt ? new Date(request.approvedAt).toLocaleString("el-GR") : null;
+  const lastDl = request.lastDownloadAt ? new Date(request.lastDownloadAt).toLocaleString("el-GR") : null;
+
+  return (
+    <div className={`backdrop-blur-sm border-2 rounded-xl p-4 md:p-5 ${statusColors[request.status] || statusColors.pending}`}>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-500/30 text-orange-100">
+            📥 Download Key
+          </span>
+          <span className="text-xs font-semibold text-slate-200">
+            {statusLabels[request.status] || request.status}
+          </span>
+        </div>
+        <div className="text-xs text-slate-400 text-right">
+          <div>Ήρθε: {submittedAt}</div>
+          {approvedAt && <div>Εγκρίθηκε: {approvedAt}</div>}
+          {lastDl && <div>Τελευταία λήψη: {lastDl}</div>}
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">Κλειδί</div>
+        <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-700 rounded-md px-3 py-2">
+          <code className="flex-1 text-orange-100 font-mono text-sm break-all">
+            {request.key}
+          </code>
+          <button
+            type="button"
+            onClick={copyKey}
+            className="shrink-0 px-2 py-1 rounded bg-slate-700/70 hover:bg-slate-700 text-slate-100 text-xs font-semibold flex items-center gap-1"
+          >
+            {copied ? "✓ OK" : "📋"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        {request.notes && (
+          <div className="sm:col-span-3">
+            <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">Σημείωση</div>
+            <div className="text-slate-100">{request.notes}</div>
+          </div>
+        )}
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">Τύπος</div>
+          <div className="text-slate-200">
+            {request.multiUse
+              ? (request.maxUses ? `Πολλαπλών (${request.useCount}/${request.maxUses})` : `Πολλαπλών (${request.useCount})`)
+              : `Μιας χρήσης${request.useCount > 0 ? ' (χρησιμοποιήθηκε)' : ''}`}
+          </div>
+        </div>
+      </div>
+
+      {!hideActions && request.status === "pending" && (
+        <div className="mt-3 px-3 py-2 bg-slate-900/40 border border-slate-700/50 rounded-md">
+          <p className="text-xs text-slate-400">
+            💡 Για τελική έγκριση, άνοιξε το SM Key Signer → tab «📥 Downloads» → «Εκκρεμή Αιτήματα».
+          </p>
+          <button
+            type="button"
+            onClick={rejectKey}
+            className="mt-2 px-3 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-xs font-semibold"
+          >
+            ✗ Απόρριψη κλειδιού
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DownloadAdminPanel({ onUnauthorized }) {
   const [settings, setSettings] = useState({
     download_drive_url: "",
