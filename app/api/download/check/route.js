@@ -139,7 +139,7 @@ export async function POST(request) {
       await sendAdminNotification(downloadKey);
       return Response.json({
         status: "pending",
-        message: "Το κλειδί σου είναι έγκυρο! Δημιουργήθηκε αίτημα. Αναμένεται έγκριση από τον Διαχειριστή για download. Ξαναδοκίμασε αργότερα.",
+        message: "Το κλειδί σου είναι έγκυρο! Δημιουργήθηκε αίτημα. Αναμένεται έγκριση από τον Διαχειριστή για download. Ξαναδοκίμασε αργότερα με το ίδιο κλειδί στο ίδιο πεδίο.",
       });
     }
 

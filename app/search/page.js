@@ -131,7 +131,7 @@ function SearchCard({
       className="bg-slate-800/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6 md:p-8 shadow-2xl"
     >
       <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
-        Αναζήτηση Αίτησης
+        Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης
       </h1>
       <p className="text-slate-400 text-sm mb-6">
         Πληκτρολόγησε το Pickup Code που είχες επιλέξει όταν υπέβαλλες την
@@ -178,7 +178,7 @@ function SearchCard({
             Αναζήτηση...
           </span>
         ) : (
-          "Αναζήτηση Αίτησης"
+          "Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης"
         )}
       </button>
     </form>

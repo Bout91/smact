@@ -375,7 +375,7 @@ function ResultCard({ result }) {
           Το κλειδί σου είναι έγκυρο!
         </h3>
         <p className="text-emerald-100/90 text-center text-sm mb-5">
-          Πάτα το κουμπί παρακάτω για να ανοίξει το Google Drive όπου βρίσκεται το αρχείο Setup.
+          Πάτα το κουμπί παρακάτω για να κατεβάσεις το Setup αρχείο που περιέχει τον Φάκελο του Server και τον Φάκελο του Προγράμματος.
         </p>
         <a
           href={result.downloadUrl}

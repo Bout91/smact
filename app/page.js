@@ -118,7 +118,7 @@ function MainScreen() {
           </h1>
           <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-xl mx-auto mb-12">
             Υπηρεσία λήψης &amp; ενεργοποίησης του Service Manager Pro. Δες τι
-            προσφέρει το πρόγραμμα, κατέβασέ το με το Κλειδί Download που
+            προσφέρει το πρόγραμμα, κατέβασε το με το Κλειδί Download που
             έχεις πάρει, υπόβαλλε αίτηση για κωδικό ενεργοποίησης ή αναζήτησε
             αίτηση που έχεις ήδη κάνει.
           </p>
@@ -134,7 +134,7 @@ function MainScreen() {
               >
                 <span className="flex items-center justify-center gap-3">
                   <span className="text-2xl">✨</span>
-                  <span>Τί προσφέρει το Service Manager Pro</span>
+                  <span>Τί είναι και τί προσφέρει το Service Manager Pro</span>
                 </span>
               </button>
 
@@ -172,7 +172,7 @@ function MainScreen() {
               >
                 <span className="flex items-center justify-center gap-3">
                   <span className="text-2xl">🔍</span>
-                  <span>Αναζήτηση Αίτησης</span>
+                  <span>Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης</span>
                 </span>
               </button>
             </div>

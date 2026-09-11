@@ -471,8 +471,8 @@ function FormCard({
           spellCheck="false"
         />
         <p className="text-xs text-slate-500 mt-1.5">
-          Αν έχεις κατεβάσει το πρόγραμμα μέσω κλειδιού Download, βάλε το εδώ ώστε
-          να καταλάβει ο Διαχειριστής ότι σε γνωρίζει.
+          Αν έχεις κατεβάσει το πρόγραμμα μέσω κλειδιού Download, συμπλήρωσε το
+          σε αυτό το πεδίο.
         </p>
       </div>
 
@@ -585,9 +585,9 @@ function SuccessCard({ pickupCode, machineCount, onBackHome }) {
         <ol className="text-sm text-slate-300 space-y-2 list-decimal list-inside">
           <li>Περίμενε λίγες ώρες να ετοιμαστούν τα κλειδιά σου.</li>
           <li>
-            Επίστρεψε εδώ και πάτα{" "}
+            Επέστρεψε εδώ και πάτα στην{" "}
             <span className="text-cyan-300 font-semibold">
-              Αναζήτηση Αίτησης
+              Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης
             </span>
             .
           </li>
