@@ -198,9 +198,11 @@ export default function RequestPage() {
         />
       )}
 
-      <Background />
-
-      <main className="relative z-10 min-h-screen flex flex-col">
+      {/* Φάση 12p: Wrapper με relative ώστε το Background (absolute inset-0)
+          να καλύπτει ΟΛΟ το scrollable content και να σκρολάρει μαζί */}
+      <div className="relative min-h-screen">
+        <Background />
+        <main className="relative z-10 min-h-screen flex flex-col">
         <header className="flex items-center justify-between px-6 py-5">
           <button
             type="button"
@@ -268,7 +270,8 @@ export default function RequestPage() {
         <footer className="px-6 py-4 text-center text-xs text-slate-500">
           SMAct · Χωρίς αποθήκευση προσωπικών δεδομένων
         </footer>
-      </main>
+        </main>
+      </div>
     </>
   );
 }
@@ -623,20 +626,29 @@ function SuccessCard({ pickupCode, machineCount, onBackHome }) {
 }
 
 function Background() {
+  // Φάση 12p: Background image που σκρολάρει ΜΑΖΙ με το content
+  // (absolute αντί για fixed). Καλύπτει ολόκληρη τη σελίδα, κάθεται
+  // στην κορυφή, και όταν κάνεις scroll η εικόνα ανεβαίνει μαζί με
+  // το υπόλοιπο περιεχόμενο.
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-      <div className="absolute inset-0 circuit-pattern opacity-70" />
+    <div
+      className="absolute inset-0 z-0 overflow-hidden bg-slate-900 pointer-events-none"
+      aria-hidden="true"
+    >
+      {/* Hero εικόνα (αξιωματικός + Patriot) — καλύπτει το πλάτος και
+          κάθεται στην κορυφή του page */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] animate-pulse-slow pointer-events-none"
-        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-screen bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/request-bg.jpg')" }}
       />
+      {/* Gradient fade στο κάτω μέρος της εικόνας ώστε να ενσωματώνεται
+          ομαλά στο dark navy background χωρίς σκληρή γραμμή */}
+      <div className="absolute inset-x-0 top-[75vh] h-[35vh] bg-gradient-to-b from-transparent via-slate-900/60 to-slate-900" />
+      {/* Subtle circuit pattern σε όλη τη σελίδα */}
+      <div className="absolute inset-0 circuit-pattern opacity-40" />
+      {/* Animated blue glow (ζωντάνια στο viewport) */}
       <div
-        className="absolute top-20 right-20 w-80 h-80 rounded-full bg-cyan-500 blur-[100px] opacity-15 pointer-events-none"
-        aria-hidden="true"
-      />
-      <div
-        className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-indigo-600 blur-[120px] opacity-15 pointer-events-none"
-        aria-hidden="true"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] opacity-20 animate-pulse-slow"
       />
     </div>
   );
