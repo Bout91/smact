@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Script from "next/script";
+import CollapsibleInfoBox from "../components/CollapsibleInfoBox";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
@@ -237,9 +238,21 @@ export default function DownloadPage() {
               <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
                 Καταχώρηση κλειδιού για Download
               </h1>
-              <p className="text-slate-400 text-sm mb-6">
+              <p className="text-slate-400 text-sm mb-4">
                 Πληκτρολόγησε το κλειδί που σου έχει δώσει ο Διαχειριστής.
               </p>
+
+              {/* Φάση 12i (Π5) — Info-box για τη ροή του κλειδιού Download */}
+              <CollapsibleInfoBox
+                accent="amber"
+                title="🔑 Τι θα συμβεί όταν καταχωρήσεις το κλειδί (πάτα για λεπτομέρειες)"
+                steps={[
+                  "Καταχωρείς το κλειδί που σου έδωσε ο Διαχειριστής και πατάς «Έλεγχος / Καταχώρηση».",
+                  "Αν το κλειδί είναι ήδη εγκεκριμένο, εμφανίζεται αμέσως το κουμπί λήψης.",
+                  "Αν είναι η πρώτη σου καταχώρηση, το κλειδί θα σταλθεί στον Διαχειριστή για έγκριση. Ξαναδοκίμασε αργότερα με το ίδιο κλειδί στο ίδιο πεδίο.",
+                  "Αν το κλειδί δεν είναι έγκυρο, θα δεις σχετικό μήνυμα και μπορείς να επικοινωνήσεις με τον Διαχειριστή για να πάρεις σωστό κλειδί.",
+                ]}
+              />
 
               <div className="mb-5">
                 <label htmlFor="dlkey" className="block text-sm font-semibold text-slate-200 mb-2">
@@ -298,10 +311,22 @@ export default function DownloadPage() {
                 <span>💬</span>
                 <span>Σχόλια / Αναφορά Bug / Προτάσεις</span>
               </h2>
-              <p className="text-slate-400 text-sm mb-5">
+              <p className="text-slate-400 text-sm mb-4">
                 <span className="text-amber-300 font-semibold">Μόνο όσοι έχουν εγκεκριμένο Κλειδί Download</span>{" "}
                 μπορούν να στείλουν σχόλια. Καταχώρησε το κλειδί σου + το σχόλιό σου.
               </p>
+
+              {/* Φάση 12i (Π5) — Info-box για τη ροή των σχολίων */}
+              <CollapsibleInfoBox
+                accent="blue"
+                title="💬 Πότε φτάνουν τα σχόλια στον Διαχειριστή (πάτα για λεπτομέρειες)"
+                steps={[
+                  "Γράψε το σχόλιό σου (bug που εντόπισες, πρόταση βελτίωσης, ή οτιδήποτε άλλο θέλεις να μοιραστείς).",
+                  "Καταχώρησε ξανά το εγκεκριμένο Κλειδί Download σου στο σχετικό πεδίο.",
+                  "Πάτα «Αποστολή Σχολίου» — το σχόλιο φτάνει άμεσα στον Διαχειριστή.",
+                  "Δεν υπάρχει αυτόματη απάντηση — αν χρειάζεσαι επικοινωνία, αναφέρσου με στοιχεία επικοινωνίας.",
+                ]}
+              />
 
               {feedbackDone ? (
                 <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/40 rounded-lg">

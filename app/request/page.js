@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Script from "next/script";
+import CollapsibleInfoBox from "../components/CollapsibleInfoBox";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
@@ -302,10 +303,21 @@ function FormCard({
       <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
         Αίτημα Κωδικού Ενεργοποίησης
       </h1>
-      <p className="text-slate-400 text-sm mb-6">
+      <p className="text-slate-400 text-sm mb-4">
         Συμπλήρωσε τα παρακάτω πεδία για να υποβάλλεις αίτηση. Μπορείς να
         προσθέσεις έως {MAX_MACHINE_IDS} Machine-ids σε μια αίτηση.
       </p>
+
+      {/* Φάση 12i (Π5) — Info-box με τα βήματα της διαδικασίας */}
+      <CollapsibleInfoBox
+        accent="cyan"
+        title="⏱ Πώς θα κυλήσει η διαδικασία (πάτα για λεπτομέρειες)"
+        steps={[
+          "Συμπληρώνεις τη φόρμα και επιλέγεις ένα δικό σου Pickup Code (θα το χρειαστείς για να ξαναβρείς την αίτηση αργότερα).",
+          "Ο Διαχειριστής ειδοποιείται αυτόματα και εγκρίνει την αίτηση — συνήθως εντός λίγων ωρών.",
+          "Επιστρέφεις με το Pickup Code στην «Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης» για να κατεβάσεις τα κλειδιά σου (ένα .txt αρχείο για κάθε Machine-id).",
+        ]}
+      />
 
       <div className="mb-5">
         <label className="block text-sm font-semibold text-slate-200 mb-2">

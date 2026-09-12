@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import CollapsibleInfoBox from "../components/CollapsibleInfoBox";
 
 export default function SearchPage() {
   const router = useRouter();
@@ -133,10 +134,22 @@ function SearchCard({
       <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
         Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης
       </h1>
-      <p className="text-slate-400 text-sm mb-6">
+      <p className="text-slate-400 text-sm mb-4">
         Πληκτρολόγησε το Pickup Code που είχες επιλέξει όταν υπέβαλλες την
         αίτηση.
       </p>
+
+      {/* Φάση 12i (Π5) — Info-box για τη ροή της αναζήτησης */}
+      <CollapsibleInfoBox
+        accent="cyan"
+        title="🔍 Τι θα βρεις εδώ (πάτα για λεπτομέρειες)"
+        steps={[
+          "Πληκτρολόγησε ακριβώς το Pickup Code που είχες επιλέξει όταν έκανες την αίτηση (τα κεφαλαία/μικρά μετράνε).",
+          "Αν η αίτηση έχει εγκριθεί, θα εμφανιστούν τα κλειδιά ενεργοποίησης για κάθε Machine-id σου — μπορείς να κατεβάσεις κάθε κλειδί σαν ξεχωριστό αρχείο .txt.",
+          "Αν είναι ακόμα σε αναμονή, θα δεις μήνυμα «σε αναμονή έγκρισης» — ξαναδοκίμασε αργότερα με τον ίδιο Pickup Code.",
+          "Αν έχεις χάσει το Pickup Code σου, δυστυχώς η αίτηση δεν μπορεί να ανακτηθεί — θα χρειαστεί να κάνεις νέα.",
+        ]}
+      />
 
       <div className="mb-5">
         <label
