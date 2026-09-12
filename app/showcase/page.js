@@ -10,7 +10,10 @@ import { MENU_STRUCTURE, featureKey } from "../lib/menu-structure";
 // ─────────────────────────────────────────────────────────
 const PROMO_VIDEO_ID = "AOXs5BtaHyI";
 const PROMO_VIDEO_THUMB = `https://img.youtube.com/vi/${PROMO_VIDEO_ID}/mqdefault.jpg`;
-const PROMO_VIDEO_EMBED = `https://www.youtube.com/embed/${PROMO_VIDEO_ID}?rel=0&modestbranding=1&autoplay=1`;
+// Φάση 12m: vq=hd1080 & hd=1 = hint στη YouTube να ξεκινήσει σε HD.
+// Η YouTube ίσως τα αγνοήσει (deprecated), αλλά συνδυασμένα με μεγαλύτερο
+// μέγεθος player δίνουν καλύτερη πιθανότητα να παίξει σε 720p/1080p.
+const PROMO_VIDEO_EMBED = `https://www.youtube.com/embed/${PROMO_VIDEO_ID}?rel=0&modestbranding=1&autoplay=1&vq=hd1080&hd=1`;
 
 // ─────────────────────────────────────────────────────────
 // Inline Lucide-style icons (viewBox 0 0 24 24, stroke currentColor, strokeWidth 2)
@@ -700,11 +703,14 @@ function VideoModal({ maximized, onClose, onMinimize, onToggleMaximize }) {
   const dragStateRef = useRef(null);
 
   // Αρχική τοποθέτηση κεντραρισμένη (μία φορά)
+  // Φάση 12m: Μεγαλύτερο default (1280×720, 16:9) ώστε η YouTube να επιλέξει
+  // HD ποιότητα από την αρχή. Το maxWidth: calc(100vw - 20px) το προστατεύει
+  // σε μικρότερες οθόνες (πχ κινητό).
   useEffect(() => {
     if (initialized) return;
     if (typeof window === "undefined") return;
-    const w = 720;
-    const h = 480;
+    const w = 1280;
+    const h = 720;
     const x = Math.max(20, Math.floor((window.innerWidth - w) / 2));
     const y = Math.max(20, Math.floor((window.innerHeight - h) / 2));
     setPos({ x, y });
@@ -762,8 +768,9 @@ function VideoModal({ maximized, onClose, onMinimize, onToggleMaximize }) {
         position: "fixed",
         top: pos.y,
         left: pos.x,
-        width: 720,
-        height: 480,
+        // Φάση 12m: 1280×720 (16:9 HD) για καλύτερη YouTube ποιότητα
+        width: 1280,
+        height: 720,
         maxWidth: "calc(100vw - 20px)",
         maxHeight: "calc(100vh - 20px)",
         zIndex: 60,
