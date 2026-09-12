@@ -30,6 +30,22 @@ export default function DownloadPage() {
   const turnstileCheckRef = useRef(null);
   const widgetCheckIdRef = useRef(null);
 
+  // Φάση 12h: Auto-scroll στο result μόλις εμφανιστεί, ώστε ο χρήστης
+  // (ειδικά αν μπαίνει 1η φορά) να δει τι απάντηση πήρε χωρίς να ψάξει.
+  const resultRef = useRef(null);
+  useEffect(() => {
+    if (result && resultRef.current) {
+      // Μικρή καθυστέρηση για να προλάβει το browser να render-άρει το card
+      const t = setTimeout(() => {
+        resultRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [result]);
+
   // Load public settings for contact message
   useEffect(() => {
     fetch("/api/settings/public", { cache: "no-store" })
@@ -266,8 +282,12 @@ export default function DownloadPage() {
               </button>
             </form>
 
-            {/* Result card */}
-            {result && <ResultCard result={result} />}
+            {/* Result card — Φάση 12h: με ref για auto-scroll */}
+            {result && (
+              <div ref={resultRef} className="scroll-mt-20">
+                <ResultCard result={result} />
+              </div>
+            )}
 
             {/* Feedback / Bug report card */}
             <form
