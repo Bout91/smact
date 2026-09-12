@@ -29,17 +29,18 @@ export default function Home() {
 function Background() {
   return (
     <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-      <div className="absolute inset-0 circuit-pattern opacity-70" />
+      {/* Φάση 12o: Hero background εικόνα — φαίνεται μόνο στο MainScreen
+          (το SplashIntro έχει δικό του overlay που καλύπτει από πάνω).
+          Η εικόνα έχει ήδη ενσωματωμένο το χρωματισμό του site (dark
+          navy overlay + blue/cyan/indigo glows + circuit dots). */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] animate-pulse-slow pointer-events-none"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+        style={{ backgroundImage: "url('/hero-bg.jpg')" }}
         aria-hidden="true"
       />
+      {/* Extra subtle animated glow για ζωντάνια πάνω από τη στατική εικόνα */}
       <div
-        className="absolute top-20 right-20 w-80 h-80 rounded-full bg-cyan-500 blur-[100px] opacity-15 pointer-events-none"
-        aria-hidden="true"
-      />
-      <div
-        className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-indigo-600 blur-[120px] opacity-15 pointer-events-none"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] opacity-25 animate-pulse-slow pointer-events-none"
         aria-hidden="true"
       />
     </div>
