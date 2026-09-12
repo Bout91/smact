@@ -10,10 +10,10 @@ import { MENU_STRUCTURE, featureKey } from "../lib/menu-structure";
 // ─────────────────────────────────────────────────────────
 const PROMO_VIDEO_ID = "AOXs5BtaHyI";
 const PROMO_VIDEO_THUMB = `https://img.youtube.com/vi/${PROMO_VIDEO_ID}/mqdefault.jpg`;
-// Φάση 12m: vq=hd1080 & hd=1 = hint στη YouTube να ξεκινήσει σε HD.
-// Η YouTube ίσως τα αγνοήσει (deprecated), αλλά συνδυασμένα με μεγαλύτερο
-// μέγεθος player δίνουν καλύτερη πιθανότητα να παίξει σε 720p/1080p.
-const PROMO_VIDEO_EMBED = `https://www.youtube.com/embed/${PROMO_VIDEO_ID}?rel=0&modestbranding=1&autoplay=1&vq=hd1080&hd=1`;
+// Φάση 12n: Αφαίρεση των vq=hd1080 & hd=1 params — η YouTube τα αγνοεί.
+// Η ποιότητα καθορίζεται πλέον από το μέγεθος του player (1280×720)
+// + τις προτιμήσεις του κάθε χρήστη στη YouTube.
+const PROMO_VIDEO_EMBED = `https://www.youtube.com/embed/${PROMO_VIDEO_ID}?rel=0&modestbranding=1&autoplay=1`;
 
 // ─────────────────────────────────────────────────────────
 // Inline Lucide-style icons (viewBox 0 0 24 24, stroke currentColor, strokeWidth 2)
