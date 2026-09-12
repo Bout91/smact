@@ -130,10 +130,12 @@ export async function GET(request) {
     );
   }
 
-  // Έλεγχος ότι το κλειδί παραμένει έγκυρο στη βάση
+  // Φάση 12l: Πλήρης έλεγχος + increment use_count (πραγματικό download)
+  let keyRow;
   try {
     const rows = await sql`
-      SELECT status FROM download_keys WHERE id = ${payload.kid} LIMIT 1
+      SELECT id, status, multi_use, use_count, max_uses
+      FROM download_keys WHERE id = ${payload.kid} LIMIT 1
     `;
     if (rows.length === 0) {
       return errorPage(
@@ -141,11 +143,26 @@ export async function GET(request) {
         "Το κλειδί σου δεν βρέθηκε. Επικοινώνησε με τον Διαχειριστή."
       );
     }
-    const status = rows[0].status;
-    if (status !== "approved" && status !== "used_up") {
+    keyRow = rows[0];
+    const status = keyRow.status;
+    if (status !== "approved") {
+      // Ήδη used_up, rejected, ή pending — δεν επιτρέπεται download
       return errorPage(
         "Κλειδί μη ενεργό",
-        "Το κλειδί σου δεν είναι πλέον ενεργό για download. Επικοινώνησε με τον Διαχειριστή."
+        "Το κλειδί σου δεν είναι πλέον ενεργό για download. Ίσως εξαντλήθηκε ή ανακλήθηκε. Επικοινώνησε με τον Διαχειριστή."
+      );
+    }
+    // Belt-and-suspenders: ξανα-έλεγχος ορίου σε περίπτωση race condition
+    if (!keyRow.multi_use && keyRow.use_count >= 1) {
+      return errorPage(
+        "Κλειδί εξαντλήθηκε",
+        "Αυτό το κλειδί είναι μιας χρήσης και έχει ήδη χρησιμοποιηθεί. Επικοινώνησε με τον Διαχειριστή για νέο."
+      );
+    }
+    if (keyRow.multi_use && keyRow.max_uses && keyRow.use_count >= keyRow.max_uses) {
+      return errorPage(
+        "Κλειδί εξαντλήθηκε",
+        "Αυτό το κλειδί έχει φτάσει το μέγιστο αριθμό χρήσεων. Επικοινώνησε με τον Διαχειριστή για νέο."
       );
     }
   } catch (err) {
@@ -164,6 +181,33 @@ export async function GET(request) {
       "Ο Διαχειριστής δεν έχει ορίσει ακόμα το σύνδεσμο λήψης.",
       500
     );
+  }
+
+  // Φάση 12l: Increment use_count ΤΩΡΑ (πραγματικό download)
+  // + update status αν έφτασε το limit
+  try {
+    const newUseCount = keyRow.use_count + 1;
+    let newStatus = "approved";
+    if (!keyRow.multi_use) {
+      newStatus = "used_up";
+    } else if (keyRow.max_uses && newUseCount >= keyRow.max_uses) {
+      newStatus = "used_up";
+    }
+    await sql`
+      UPDATE download_keys
+      SET use_count = ${newUseCount},
+          last_download_at = NOW(),
+          status = ${newStatus}
+      WHERE id = ${keyRow.id}
+    `;
+    console.log(
+      `[SMAct] Download served for key id=${keyRow.id} use_count=${newUseCount}` +
+        (keyRow.max_uses ? `/${keyRow.max_uses}` : "") +
+        ` status=${newStatus}`
+    );
+  } catch (err) {
+    console.error("[SMAct] Increment use_count error:", err);
+    // Δεν κόβουμε το download — το log αρκεί
   }
 
   // Μετατροπή σε direct-download URL

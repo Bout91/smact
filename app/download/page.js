@@ -430,6 +430,14 @@ function ResultCard({ result }) {
         >
           ⬇ Λήψη Setup Προγράμματος
         </a>
+
+        {/* Φάση 12l: Ενημέρωση για απομένουσες χρήσεις (πάντα ορατή) */}
+        <UsesBadge
+          multiUse={result.multiUse}
+          maxUses={result.maxUses}
+          remainingUses={result.remainingUses}
+        />
+
         <p className="text-xs text-emerald-200/70 text-center mt-3">
           Στο Google Drive πάτα το κουμπί «Λήψη» (⬇) πάνω δεξιά.
           Αν βγει προειδοποίηση «Αδυναμία σάρωσης για ιούς», είναι απλά επειδή το αρχείο είναι μεγάλο —
@@ -503,6 +511,42 @@ function Background() {
         className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-red-500 blur-[120px] opacity-10 pointer-events-none"
         aria-hidden="true"
       />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// UsesBadge — Φάση 12l
+// Εμφανίζει πάντα (πράσινο, ταιριάζει με το ResultCard success):
+//   • Μιας χρήσης            → «Το κλειδί αυτό είναι μιας χρήσης.»
+//   • Πολλαπλών με max_uses  → «Το συγκεκριμένο κλειδί μπορεί να χρησιμοποιηθεί
+//                              άλλες X φορές για Download.»
+//   • Πολλαπλών unlimited    → «Απεριόριστες χρήσεις για Download.»
+// ─────────────────────────────────────────────────────────
+function UsesBadge({ multiUse, maxUses, remainingUses }) {
+  let text = null;
+  if (multiUse === false) {
+    text = "Το κλειδί αυτό είναι μιας χρήσης για Download.";
+  } else if (multiUse === true && maxUses && typeof remainingUses === "number") {
+    if (remainingUses <= 0) {
+      text = "Έχεις εξαντλήσει τις επιτρεπόμενες χρήσεις.";
+    } else if (remainingUses === 1) {
+      text = "Το συγκεκριμένο κλειδί μπορεί να χρησιμοποιηθεί άλλη 1 φορά για Download.";
+    } else {
+      text = `Το συγκεκριμένο κλειδί μπορεί να χρησιμοποιηθεί άλλες ${remainingUses} φορές για Download.`;
+    }
+  } else if (multiUse === true) {
+    text = "Απεριόριστες χρήσεις για Download.";
+  }
+
+  if (!text) return null;
+
+  return (
+    <div className="mt-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+      <span className="text-emerald-300 text-sm" aria-hidden="true">ℹ</span>
+      <span className="text-emerald-100 text-xs md:text-sm font-medium text-center">
+        {text}
+      </span>
     </div>
   );
 }

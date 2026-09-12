@@ -172,6 +172,21 @@ export async function POST(request) {
     }
 
     if (row.status === "approved") {
+      // Φάση 12l: Έλεγχος ορίου ΠΡΙΝ επιστρέψουμε URL
+      // (χωρίς increment — το increment γίνεται πλέον στο /get)
+      if (!row.multi_use && row.use_count >= 1) {
+        return Response.json({
+          status: "used_up",
+          message: "Αυτό το κλειδί έχει ήδη χρησιμοποιηθεί. Επικοινώνησε με τον Διαχειριστή για νέο.",
+        });
+      }
+      if (row.multi_use && row.max_uses && row.use_count >= row.max_uses) {
+        return Response.json({
+          status: "used_up",
+          message: "Αυτό το κλειδί έχει εξαντληθεί (χρησιμοποιήθηκε τις μέγιστες φορές). Επικοινώνησε με τον Διαχειριστή για νέο.",
+        });
+      }
+
       // Έλεγχος: υπάρχει το Drive URL στα settings;
       const setting = await sql`
         SELECT value FROM site_settings WHERE key = 'download_drive_url' LIMIT 1
@@ -194,21 +209,11 @@ export async function POST(request) {
         );
       }
 
-      // Update usage counter
-      let newStatus = "approved";
-      const newUseCount = row.use_count + 1;
-      if (!row.multi_use) {
-        newStatus = "used_up";
-      } else if (row.max_uses && newUseCount >= row.max_uses) {
-        newStatus = "used_up";
-      }
-
+      // Φάση 12l: ΜΟΝΟ ενημέρωση last_seen_at (ΟΧΙ increment use_count)
+      // Το use_count αυξάνεται πλέον στο /get όταν γίνει πραγματικός download
       await sql`
         UPDATE download_keys
-        SET use_count = ${newUseCount},
-            last_download_at = NOW(),
-            status = ${newStatus},
-            last_seen_at = NOW()
+        SET last_seen_at = NOW()
         WHERE id = ${row.id}
       `;
 
@@ -216,10 +221,24 @@ export async function POST(request) {
       const token = createSignedToken(row.id, tokenSecret);
       const signedUrl = `/api/download/get?t=${token}`;
 
+      // Φάση 12l: Υπολογισμός remaining uses για το UI
+      let remainingUses = null;
+      if (!row.multi_use) {
+        remainingUses = 1; // Μιας χρήσης — απομένει 1
+      } else if (row.max_uses) {
+        remainingUses = row.max_uses - row.use_count;
+      }
+      // Αν multi_use χωρίς max_uses → remainingUses = null (unlimited)
+
       return Response.json({
         status: "ok",
         downloadUrl: signedUrl,
         message: "Το κλειδί σου είναι έγκυρο! Πάτα το κουμπί λήψης παρακάτω.",
+        // Φάση 12l: πληροφορίες χρήσεων για το UI
+        multiUse: row.multi_use,
+        maxUses: row.max_uses,
+        useCount: row.use_count,
+        remainingUses,
       });
     }
 
