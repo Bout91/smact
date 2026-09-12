@@ -1,27 +1,24 @@
 // ─────────────────────────────────────────────────────────
-// POST /api/download/check — Public endpoint (ΝΕΑ ΛΟΓΙΚΗ Φάσης 12b)
+// POST /api/download/check — Public endpoint
 //
-// Body: { downloadKey, turnstileToken }
+// Φάση 12k (κρυφά URLs):
+//   • Αν status='approved', ΔΕΝ επιστρέφει πλέον απευθείας το Drive URL
+//   • Αντ' αυτού, δημιουργεί έναν HMAC-signed token (15 λεπτά ζωής)
+//   • Επιστρέφει URL της μορφής /api/download/get?t=<token>
+//   • Ο user βλέπει smact URL, όχι Drive URL
 //
-// ΝΕΑ ΛΟΓΙΚΗ (anti-fraud):
-//   • Αν το κλειδί ΔΕΝ υπάρχει στη DB (δεν έγινε pre-approved από admin)
-//       → REJECT «Το κλειδί δεν είναι έγκυρο.» Τίποτα δεν αποθηκεύεται.
-//   • Αν status='preauth' (admin το δημιούργησε)
-//       → UPDATE σε 'pending' (user το εισήγαγε), notify admin, return "pending"
-//   • Αν status='pending' (user το είχε ήδη εισάγει)
-//       → UPDATE last_seen_at, return "pending"
-//   • Αν status='approved' → return download URL (και update use_count)
-//   • Αν status='used_up' → return "already used"
-//   • Αν status='rejected' → return "not valid"
+// Απαιτείται νέα env variable: DOWNLOAD_TOKEN_SECRET
 // ─────────────────────────────────────────────────────────
 
 import { neon } from "@neondatabase/serverless";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const sql = neon(process.env.DATABASE_URL);
 const RATE_LIMIT_MAX = 30;
+const TOKEN_LIFETIME_SECONDS = 15 * 60; // 15 λεπτά
 
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -55,7 +52,6 @@ function getClientIp(request) {
 async function checkAndRecordRateLimit(ip, tag) {
   try {
     await sql`DELETE FROM rate_limit_hits WHERE hit_at < NOW() - INTERVAL '10 minutes'`;
-    // Χρησιμοποιώ tagged ip για να μη μπερδεύεται feedback rate limit με check rate limit
     const taggedIp = `${tag}:${ip}`;
     const rows = await sql`
       SELECT COUNT(*)::int AS cnt FROM rate_limit_hits
@@ -89,6 +85,19 @@ async function sendAdminNotification(downloadKey) {
   } catch {}
 }
 
+// Φάση 12k: Δημιουργία HMAC-signed token για download
+function createSignedToken(keyId, secret) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    kid: keyId,
+    iat: now,
+    exp: now + TOKEN_LIFETIME_SECONDS,
+  };
+  const dataB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = crypto.createHmac("sha256", secret).update(dataB64).digest("base64url");
+  return `${dataB64}.${sig}`;
+}
+
 export async function POST(request) {
   try {
     const ip = getClientIp(request);
@@ -111,7 +120,6 @@ export async function POST(request) {
       return Response.json({ error: "Το κλειδί είναι πολύ μεγάλο." }, { status: 400 });
     }
 
-    // Έλεγξε αν το κλειδί υπάρχει
     const existing = await sql`
       SELECT id, key, status, multi_use, use_count, max_uses
       FROM download_keys
@@ -120,7 +128,6 @@ export async function POST(request) {
     `;
 
     if (existing.length === 0) {
-      // ΝΕΑ ΛΟΓΙΚΗ: αν το κλειδί δεν υπάρχει στα pre-approved, απόρριψη — ΤΙΠΟΤΑ δεν αποθηκεύεται
       return Response.json({
         status: "rejected",
         message: "Το κλειδί δεν είναι έγκυρο. Επικοινώνησε με τον Διαχειριστή για να πάρεις κλειδί.",
@@ -130,7 +137,6 @@ export async function POST(request) {
     const row = existing[0];
 
     if (row.status === "preauth") {
-      // Πρώτη εισαγωγή έγκυρου κλειδιού από user — μεταβαίνει σε pending, ειδοποίηση admin
       await sql`
         UPDATE download_keys
         SET status = 'pending', last_seen_at = NOW()
@@ -144,7 +150,6 @@ export async function POST(request) {
     }
 
     if (row.status === "pending") {
-      // Επανείσοδος - update last_seen_at
       await sql`UPDATE download_keys SET last_seen_at = NOW() WHERE id = ${row.id}`;
       return Response.json({
         status: "pending",
@@ -167,18 +172,29 @@ export async function POST(request) {
     }
 
     if (row.status === "approved") {
-      // Πάρε το Drive URL από τα settings
+      // Έλεγχος: υπάρχει το Drive URL στα settings;
       const setting = await sql`
         SELECT value FROM site_settings WHERE key = 'download_drive_url' LIMIT 1
       `;
-      const downloadUrl = setting.length > 0 ? setting[0].value : "";
-      if (!downloadUrl) {
+      const driveUrl = setting.length > 0 ? setting[0].value : "";
+      if (!driveUrl) {
         return Response.json(
           { error: "Ο Διαχειριστής δεν έχει ορίσει ακόμα το σύνδεσμο λήψης." },
           { status: 500 }
         );
       }
 
+      // Έλεγχος: υπάρχει το secret για signing;
+      const tokenSecret = process.env.DOWNLOAD_TOKEN_SECRET;
+      if (!tokenSecret) {
+        console.error("[SMAct] DOWNLOAD_TOKEN_SECRET is not set");
+        return Response.json(
+          { error: "Το σύστημα δεν έχει ρυθμιστεί σωστά (missing DOWNLOAD_TOKEN_SECRET). Επικοινώνησε με τον Διαχειριστή." },
+          { status: 500 }
+        );
+      }
+
+      // Update usage counter
       let newStatus = "approved";
       const newUseCount = row.use_count + 1;
       if (!row.multi_use) {
@@ -196,9 +212,13 @@ export async function POST(request) {
         WHERE id = ${row.id}
       `;
 
+      // Φάση 12k: Επιστροφή signed URL αντί για το raw Drive URL
+      const token = createSignedToken(row.id, tokenSecret);
+      const signedUrl = `/api/download/get?t=${token}`;
+
       return Response.json({
         status: "ok",
-        downloadUrl,
+        downloadUrl: signedUrl,
         message: "Το κλειδί σου είναι έγκυρο! Πάτα το κουμπί λήψης παρακάτω.",
       });
     }
