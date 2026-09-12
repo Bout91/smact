@@ -626,27 +626,23 @@ function SuccessCard({ pickupCode, machineCount, onBackHome }) {
 }
 
 function Background() {
-  // Φάση 12p: Background image που σκρολάρει ΜΑΖΙ με το content
-  // (absolute αντί για fixed). Καλύπτει ολόκληρη τη σελίδα, κάθεται
-  // στην κορυφή, και όταν κάνεις scroll η εικόνα ανεβαίνει μαζί με
-  // το υπόλοιπο περιεχόμενο.
+  // Φάση 12p (revised): Fixed background — η εικόνα μένει πάντα ορατή
+  // στο viewport, το content σκρολάρει από πάνω της. Έτσι όσο κι αν
+  // κατεβάσει scroll ο χρήστης, ο αξιωματικός + το Patriot φαίνονται
+  // συνεχώς από πίσω.
   return (
     <div
-      className="absolute inset-0 z-0 overflow-hidden bg-slate-900 pointer-events-none"
+      className="fixed inset-0 z-0 overflow-hidden bg-slate-900 pointer-events-none"
       aria-hidden="true"
     >
-      {/* Hero εικόνα (αξιωματικός + Patriot) — καλύπτει το πλάτος και
-          κάθεται στην κορυφή του page */}
+      {/* Hero εικόνα (αξιωματικός + Patriot) — καλύπτει όλο το viewport */}
       <div
-        className="absolute inset-x-0 top-0 h-screen bg-cover bg-center bg-no-repeat"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/request-bg.jpg')" }}
       />
-      {/* Gradient fade στο κάτω μέρος της εικόνας ώστε να ενσωματώνεται
-          ομαλά στο dark navy background χωρίς σκληρή γραμμή */}
-      <div className="absolute inset-x-0 top-[75vh] h-[35vh] bg-gradient-to-b from-transparent via-slate-900/60 to-slate-900" />
-      {/* Subtle circuit pattern σε όλη τη σελίδα */}
+      {/* Subtle circuit pattern */}
       <div className="absolute inset-0 circuit-pattern opacity-40" />
-      {/* Animated blue glow (ζωντάνια στο viewport) */}
+      {/* Animated blue glow (ζωντάνια) */}
       <div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] opacity-20 animate-pulse-slow"
       />
