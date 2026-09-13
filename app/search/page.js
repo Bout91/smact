@@ -566,20 +566,23 @@ function buildActivationFileContent({
 }
 
 function Background() {
+  // Φάση 12q: Fixed background — η εικόνα (γυναίκα με FPV + όχημα)
+  // μένει πάντα ορατή στο viewport. Το content σκρολάρει από πάνω της.
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-      <div className="absolute inset-0 circuit-pattern opacity-70" />
+    <div
+      className="fixed inset-0 z-0 overflow-hidden bg-slate-900 pointer-events-none"
+      aria-hidden="true"
+    >
+      {/* Hero εικόνα */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] animate-pulse-slow pointer-events-none"
-        aria-hidden="true"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/search-bg.jpg')" }}
       />
+      {/* Subtle circuit pattern */}
+      <div className="absolute inset-0 circuit-pattern opacity-40" />
+      {/* Animated blue glow (ζωντάνια) */}
       <div
-        className="absolute top-20 right-20 w-80 h-80 rounded-full bg-cyan-500 blur-[100px] opacity-15 pointer-events-none"
-        aria-hidden="true"
-      />
-      <div
-        className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-indigo-600 blur-[120px] opacity-15 pointer-events-none"
-        aria-hidden="true"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-blue-600 blur-[120px] opacity-20 animate-pulse-slow"
       />
     </div>
   );
