@@ -9,6 +9,16 @@ export default function Home() {
   // μπαίνει στο site. Αν επιστρέφει από άλλη σελίδα (π.χ. /search),
   // αγνοείται. Χρησιμοποιούμε sessionStorage — ζει όσο ο tab είναι
   // ανοιχτός, εξαφανίζεται αν κλείσει και ξανανοίξει τον browser.
+  //
+  // Φάση 12t: Για να αποφύγουμε το flicker (η MainScreen να φαίνεται
+  // για λίγα δέκατα του δευτερολέπτου ΠΡΙΝ παίξει το splash σε πρώτη
+  // επίσκεψη), κρατάμε ένα `mounted` flag. Στην αρχική render (SSR +
+  // hydration) το mounted είναι false, οπότε δείχνουμε ένα σκούρο
+  // placeholder. Μόλις τρέξει το useEffect στον client, ξέρουμε αν
+  // θα παίξει splash ή όχι, και κάνουμε mounted=true — τότε
+  // ρενταρίζεται η σωστή view (splash ή MainScreen) χωρίς να έχει
+  // φανεί ενδιάμεσα λάθος κατάσταση.
+  const [mounted, setMounted] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
   const [splashFading, setSplashFading] = useState(false);
 
@@ -22,21 +32,52 @@ export default function Home() {
       alreadyPlayed = false;
     }
 
-    if (alreadyPlayed) return; // Skip splash — ήταν επιστροφή από άλλη σελίδα
+    let fadeTimer;
+    let removeTimer;
 
-    // Πρώτη είσοδος στο site — παίζουμε το splash
-    setShowSplash(true);
-    try {
-      sessionStorage.setItem("smact_splash_played", "1");
-    } catch {}
+    if (!alreadyPlayed) {
+      // Πρώτη είσοδος στο site — παίζουμε το splash
+      setShowSplash(true);
+      try {
+        sessionStorage.setItem("smact_splash_played", "1");
+      } catch {}
 
-    const fadeTimer = setTimeout(() => setSplashFading(true), 2800);
-    const removeTimer = setTimeout(() => setShowSplash(false), 3300);
+      fadeTimer = setTimeout(() => setSplashFading(true), 2800);
+      removeTimer = setTimeout(() => setShowSplash(false), 3300);
+    }
+
+    // Είτε παίζει splash είτε όχι, τώρα είμαστε έτοιμοι να δείξουμε
+    // την σωστή view — flip mounted flag για να αντικαταστήσουμε το
+    // placeholder.
+    setMounted(true);
+
     return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(removeTimer);
+      if (fadeTimer) clearTimeout(fadeTimer);
+      if (removeTimer) clearTimeout(removeTimer);
     };
   }, []);
+
+  // Φάση 12t: Πριν το useEffect τρέξει, δείχνουμε σκούρο placeholder
+  // (ίδιο χρώμα με το splash bg) ώστε να μη φαίνεται η MainScreen για
+  // λίγα δέκατα του δευτερολέπτου πριν εμφανιστεί το splash.
+  if (!mounted) {
+    return (
+      <>
+        {/* Preload hint — ξεκινά το κατέβασμα της WebP από την αρχή */}
+        <link
+          rel="preload"
+          as="image"
+          href="/hero-bg.webp"
+          // eslint-disable-next-line react/no-unknown-property
+          fetchpriority="high"
+        />
+        <div
+          className="fixed inset-0 z-40 bg-slate-900"
+          aria-hidden="true"
+        />
+      </>
+    );
+  }
 
   return (
     <>
