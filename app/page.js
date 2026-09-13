@@ -40,6 +40,15 @@ export default function Home() {
 
   return (
     <>
+      {/* Φάση 12s: Preload hint για hero-bg WebP — ο browser το ζητά
+          με υψηλή προτεραιότητα, ταυτόχρονα με το HTML */}
+      <link
+        rel="preload"
+        as="image"
+        href="/hero-bg.webp"
+        // eslint-disable-next-line react/no-unknown-property
+        fetchpriority="high"
+      />
       <Background />
       {showSplash && <SplashIntro fading={splashFading} />}
       <MainScreen />
@@ -56,7 +65,7 @@ function Background() {
           navy overlay + blue/cyan/indigo glows + circuit dots). */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
-        style={{ backgroundImage: "url('/hero-bg.jpg')" }}
+        style={{ backgroundImage: "url('/hero-bg.webp')" }}
         aria-hidden="true"
       />
       {/* Extra subtle animated glow για ζωντάνια πάνω από τη στατική εικόνα */}

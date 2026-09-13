@@ -57,6 +57,15 @@ export default function SearchPage() {
 
   return (
     <>
+      {/* Φάση 12s: Preload hint για search-bg WebP */}
+      <link
+        rel="preload"
+        as="image"
+        href="/search-bg.webp"
+        // eslint-disable-next-line react/no-unknown-property
+        fetchpriority="high"
+      />
+
       <Background />
 
       <main className="relative z-10 min-h-screen flex flex-col">
@@ -576,7 +585,7 @@ function Background() {
       {/* Hero εικόνα */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/search-bg.jpg')" }}
+        style={{ backgroundImage: "url('/search-bg.webp')" }}
       />
       {/* Subtle circuit pattern */}
       <div className="absolute inset-0 circuit-pattern opacity-40" />

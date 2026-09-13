@@ -191,6 +191,15 @@ export default function RequestPage() {
 
   return (
     <>
+      {/* Φάση 12s: Preload hint για request-bg WebP */}
+      <link
+        rel="preload"
+        as="image"
+        href="/request-bg.webp"
+        // eslint-disable-next-line react/no-unknown-property
+        fetchpriority="high"
+      />
+
       {TURNSTILE_SITE_KEY && !submitted && (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
@@ -638,7 +647,7 @@ function Background() {
       {/* Hero εικόνα (αξιωματικός + Patriot) — καλύπτει όλο το viewport */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/request-bg.jpg')" }}
+        style={{ backgroundImage: "url('/request-bg.webp')" }}
       />
       {/* Subtle circuit pattern */}
       <div className="absolute inset-0 circuit-pattern opacity-40" />
