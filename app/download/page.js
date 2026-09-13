@@ -179,6 +179,16 @@ export default function DownloadPage() {
         />
       )}
 
+      {/* Φάση 12u: Preload hint για download-bg WebP — ο browser
+          το ζητά με υψηλή προτεραιότητα, ταυτόχρονα με το HTML */}
+      <link
+        rel="preload"
+        as="image"
+        href="/download-bg.webp"
+        // eslint-disable-next-line react/no-unknown-property
+        fetchpriority="high"
+      />
+
       <Background />
 
       <main className="relative z-10 min-h-screen flex flex-col">
@@ -496,20 +506,28 @@ function ResultCard({ result }) {
 }
 
 function Background() {
+  // Φάση 12u: Hero εικόνα για την /download σελίδα — command center
+  // operator (αριστερά) + ΕΤΑ operator με CH-47DG (δεξιά). Η εικόνα
+  // έχει ήδη ενσωματωμένο darker overlay δεξιά (για να ταμπάρει το
+  // dawn warm light) και lighter overlay αριστερά (για να διατηρήσει
+  // το cool blue tone). Fixed positioning ώστε η εικόνα να μένει
+  // ορατή όσο ο χρήστης κάνει scroll — ίδιο pattern με /request.
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-      <div className="absolute inset-0 circuit-pattern opacity-70" />
+    <div
+      className="fixed inset-0 z-0 overflow-hidden bg-slate-900 pointer-events-none"
+      aria-hidden="true"
+    >
+      {/* Hero background image */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-orange-600 blur-[120px] animate-pulse-slow opacity-30 pointer-events-none"
-        aria-hidden="true"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/download-bg.webp')" }}
       />
+      {/* Subtle circuit pattern για extra τεχνική αίσθηση */}
+      <div className="absolute inset-0 circuit-pattern opacity-30" />
+      {/* Animated cyan glow (ζωντάνια) — υποκαθιστά τα παλιά orange/amber
+          glows για να ταιριάξει με το site-wide palette */}
       <div
-        className="absolute top-20 right-20 w-80 h-80 rounded-full bg-amber-500 blur-[100px] opacity-15 pointer-events-none"
-        aria-hidden="true"
-      />
-      <div
-        className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-red-500 blur-[120px] opacity-10 pointer-events-none"
-        aria-hidden="true"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-cyan-500 blur-[120px] opacity-15 animate-pulse-slow"
       />
     </div>
   );
