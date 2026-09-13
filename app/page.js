@@ -5,10 +5,31 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 export default function Home() {
-  const [showSplash, setShowSplash] = useState(true);
+  // Φάση 12r: Το splash παίζει ΜΟΝΟ την πρώτη φορά που ο χρήστης
+  // μπαίνει στο site. Αν επιστρέφει από άλλη σελίδα (π.χ. /search),
+  // αγνοείται. Χρησιμοποιούμε sessionStorage — ζει όσο ο tab είναι
+  // ανοιχτός, εξαφανίζεται αν κλείσει και ξανανοίξει τον browser.
+  const [showSplash, setShowSplash] = useState(false);
   const [splashFading, setSplashFading] = useState(false);
 
   useEffect(() => {
+    // Ελέγχουμε αν το splash έχει ήδη παίξει σε αυτό το session
+    let alreadyPlayed = false;
+    try {
+      alreadyPlayed = sessionStorage.getItem("smact_splash_played") === "1";
+    } catch {
+      // Αν το sessionStorage είναι κλειδωμένο (privacy mode), παίζουμε το splash
+      alreadyPlayed = false;
+    }
+
+    if (alreadyPlayed) return; // Skip splash — ήταν επιστροφή από άλλη σελίδα
+
+    // Πρώτη είσοδος στο site — παίζουμε το splash
+    setShowSplash(true);
+    try {
+      sessionStorage.setItem("smact_splash_played", "1");
+    } catch {}
+
     const fadeTimer = setTimeout(() => setSplashFading(true), 2800);
     const removeTimer = setTimeout(() => setShowSplash(false), 3300);
     return () => {
