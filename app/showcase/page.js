@@ -308,6 +308,16 @@ export default function ShowcasePage() {
 
   return (
     <>
+      {/* Φάση 12v: Preload hint για showcase-bg WebP — ο browser
+          το ζητά με υψηλή προτεραιότητα, ταυτόχρονα με το HTML */}
+      <link
+        rel="preload"
+        as="image"
+        href="/showcase-bg.webp"
+        // eslint-disable-next-line react/no-unknown-property
+        fetchpriority="high"
+      />
+
       <Background />
 
       <main className="relative z-10 min-h-screen flex flex-col">
@@ -870,20 +880,28 @@ function VideoMinimizedPill({ onRestore, onClose }) {
 }
 
 function Background() {
+  // Φάση 12v: Hero εικόνα για την /showcase σελίδα — brigade-level
+  // command room με operators σε ελληνική παραλλαγή και curved
+  // monitor wall στο βάθος. Η εικόνα έχει ήδη ενσωματωμένο dark navy
+  // overlay + central vignette (για UI readability). Fixed positioning
+  // ώστε η εικόνα να μένει ορατή όσο ο χρήστης κάνει scroll — ίδιο
+  // pattern με /download, /request.
   return (
-    <div className="fixed inset-0 z-0 overflow-hidden bg-slate-900">
-      <div className="absolute inset-0 circuit-pattern opacity-70" />
+    <div
+      className="fixed inset-0 z-0 overflow-hidden bg-slate-900 pointer-events-none"
+      aria-hidden="true"
+    >
+      {/* Hero background image */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-600 blur-[120px] animate-pulse-slow pointer-events-none"
-        aria-hidden="true"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/showcase-bg.webp')" }}
       />
+      {/* Subtle circuit pattern για extra τεχνική αίσθηση */}
+      <div className="absolute inset-0 circuit-pattern opacity-25" />
+      {/* Animated indigo glow — subtle ζωντάνια, ταιριάζει με το μοβ
+          κουμπί «Τί προσφέρει» του main page */}
       <div
-        className="absolute top-20 right-20 w-80 h-80 rounded-full bg-purple-500 blur-[100px] opacity-15 pointer-events-none"
-        aria-hidden="true"
-      />
-      <div
-        className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-indigo-600 blur-[120px] opacity-15 pointer-events-none"
-        aria-hidden="true"
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-600 blur-[120px] opacity-15 animate-pulse-slow"
       />
     </div>
   );
