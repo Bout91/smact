@@ -26,6 +26,10 @@ export default function DownloadPage() {
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
 
+  // Φάση 13: GDPR consent για το feedback (χωριστό από το check που δεν
+  // στέλνει προσωπικά δεδομένα του χρήστη πέρα από το κλειδί)
+  const [feedbackConsent, setFeedbackConsent] = useState(false);
+
   // Turnstile — μόνο για το download key check (feedback χωρίς captcha, Φάση 12d)
   const [tokenCheck, setTokenCheck] = useState("");
   const turnstileCheckRef = useRef(null);
@@ -394,9 +398,35 @@ export default function DownloadPage() {
                     </div>
                   )}
 
+                  {/* Φάση 13: GDPR consent για το feedback */}
+                  <div className="mb-4">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={feedbackConsent}
+                        onChange={(e) => setFeedbackConsent(e.target.checked)}
+                        className="mt-1 w-4 h-4 rounded border-2 border-slate-500 bg-slate-900/70 text-cyan-500 focus:ring-2 focus:ring-cyan-500/40 cursor-pointer flex-shrink-0"
+                      />
+                      <span className="text-xs text-slate-400 leading-relaxed select-none">
+                        Αποδέχομαι ότι το σχόλιό μου θα διαβαστεί από τον
+                        Διαχειριστή, σύμφωνα με την{" "}
+                        <a
+                          href="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Πολιτική Απορρήτου
+                        </a>
+                        .
+                      </span>
+                    </label>
+                  </div>
+
                   <button
                     type="submit"
-                    disabled={feedbackSending || !feedbackMsg.trim() || !feedbackKey.trim()}
+                    disabled={feedbackSending || !feedbackMsg.trim() || !feedbackKey.trim() || !feedbackConsent}
                     className="w-full px-6 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {feedbackSending ? "Αποστολή..." : "📤 Αποστολή Σχολίου"}
@@ -407,9 +437,29 @@ export default function DownloadPage() {
           </div>
         </div>
 
-        <footer className="px-6 py-4 text-center text-xs text-slate-500">
-          SMAct · Χωρίς αποθήκευση προσωπικών δεδομένων
-        </footer>
+        <footer className="px-6 py-5 text-center text-xs text-slate-500 border-t border-slate-800/50">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <span>SMAct</span>
+          <span className="text-slate-700">·</span>
+          <a
+            href="/privacy"
+            className="hover:text-cyan-400 transition-colors underline underline-offset-2"
+          >
+            Πολιτική Απορρήτου
+          </a>
+          <span className="text-slate-700">·</span>
+          <a
+            href="/terms"
+            className="hover:text-cyan-400 transition-colors underline underline-offset-2"
+          >
+            Όροι Χρήσης
+          </a>
+          <span className="text-slate-700">·</span>
+          <span className="text-slate-600">
+            Ελάχιστα δεδομένα, καμία διαφήμιση
+          </span>
+        </div>
+      </footer>
       </main>
     </>
   );

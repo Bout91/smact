@@ -42,6 +42,9 @@ export default function RequestPage() {
   const turnstileRef = useRef(null);
   const turnstileWidgetIdRef = useRef(null);
 
+  // Φάση 13: GDPR consent — απαιτείται ρητή συγκατάθεση πριν την υποβολή
+  const [consentAccepted, setConsentAccepted] = useState(false);
+
   useEffect(() => {
     if (submitted) return;
     if (!TURNSTILE_SITE_KEY) return;
@@ -276,9 +279,29 @@ export default function RequestPage() {
           </div>
         </div>
 
-        <footer className="px-6 py-4 text-center text-xs text-slate-500">
-          SMAct · Χωρίς αποθήκευση προσωπικών δεδομένων
-        </footer>
+        <footer className="px-6 py-5 text-center text-xs text-slate-500 border-t border-slate-800/50">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <span>SMAct</span>
+          <span className="text-slate-700">·</span>
+          <a
+            href="/privacy"
+            className="hover:text-cyan-400 transition-colors underline underline-offset-2"
+          >
+            Πολιτική Απορρήτου
+          </a>
+          <span className="text-slate-700">·</span>
+          <a
+            href="/terms"
+            className="hover:text-cyan-400 transition-colors underline underline-offset-2"
+          >
+            Όροι Χρήσης
+          </a>
+          <span className="text-slate-700">·</span>
+          <span className="text-slate-600">
+            Ελάχιστα δεδομένα, καμία διαφήμιση
+          </span>
+        </div>
+      </footer>
         </main>
       </div>
     </>
@@ -516,9 +539,44 @@ function FormCard({
         </div>
       )}
 
+      {/* Φάση 13: GDPR consent checkbox — υποχρεωτικό πριν την υποβολή */}
+      <div className="mb-5">
+        <label className="flex items-start gap-3 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={consentAccepted}
+            onChange={(e) => setConsentAccepted(e.target.checked)}
+            className="mt-1 w-5 h-5 rounded border-2 border-slate-500 bg-slate-900/70 text-cyan-500 focus:ring-2 focus:ring-cyan-500/40 cursor-pointer flex-shrink-0"
+          />
+          <span className="text-sm text-slate-300 leading-relaxed select-none">
+            Αποδέχομαι την επεξεργασία των δεδομένων μου σύμφωνα με την{" "}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Πολιτική Απορρήτου
+            </a>{" "}
+            και τους{" "}
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Όρους Χρήσης
+            </a>
+            .
+          </span>
+        </label>
+      </div>
+
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || !consentAccepted}
         className="w-full px-6 py-4 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-semibold text-base shadow-lg shadow-blue-900/50 hover:shadow-xl hover:shadow-blue-900/70 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200"
       >
         {submitting ? (
@@ -530,6 +588,11 @@ function FormCard({
           "Υποβολή Αίτησης"
         )}
       </button>
+      {!consentAccepted && (
+        <p className="mt-2 text-xs text-slate-500 text-center">
+          Χρειάζεται να αποδεχτείς την Πολιτική για να προχωρήσεις
+        </p>
+      )}
     </form>
   );
 }

@@ -252,8 +252,28 @@ function MainScreen() {
         </div>
       </div>
 
-      <footer className="px-6 py-4 text-center text-xs text-slate-500">
-        SMAct · Χωρίς αποθήκευση προσωπικών δεδομένων
+      <footer className="px-6 py-5 text-center text-xs text-slate-500 border-t border-slate-800/50">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <span>SMAct</span>
+          <span className="text-slate-700">·</span>
+          <a
+            href="/privacy"
+            className="hover:text-cyan-400 transition-colors underline underline-offset-2"
+          >
+            Πολιτική Απορρήτου
+          </a>
+          <span className="text-slate-700">·</span>
+          <a
+            href="/terms"
+            className="hover:text-cyan-400 transition-colors underline underline-offset-2"
+          >
+            Όροι Χρήσης
+          </a>
+          <span className="text-slate-700">·</span>
+          <span className="text-slate-600">
+            Ελάχιστα δεδομένα, καμία διαφήμιση
+          </span>
+        </div>
       </footer>
     </main>
   );
