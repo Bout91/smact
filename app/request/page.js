@@ -43,9 +43,6 @@ export default function RequestPage() {
   const turnstileRef = useRef(null);
   const turnstileWidgetIdRef = useRef(null);
 
-  // Φάση 13: GDPR consent — απαιτείται ρητή συγκατάθεση πριν την υποβολή
-  const [consentAccepted, setConsentAccepted] = useState(false);
-
   useEffect(() => {
     if (submitted) return;
     if (!TURNSTILE_SITE_KEY) return;
@@ -330,6 +327,11 @@ function FormCard({
   hasSiteKey,
 }) {
   const canAddMore = machineIds.length < MAX_MACHINE_IDS;
+
+  // Φάση 13: GDPR consent — τοπικό state του FormCard (δηλωμένο εδώ ώστε
+  // να είναι στο ίδιο scope με το checkbox και το submit button που το
+  // χρησιμοποιούν)
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   return (
     <form
