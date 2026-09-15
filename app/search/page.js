@@ -224,6 +224,27 @@ function SearchCard({
           "Αναζήτηση Αίτησης Κωδικού Ενεργοποίησης"
         )}
       </button>
+
+      {/* Φάση 13: Implied consent notice — δεν χρειάζεται checkbox
+          (νομική βάση: εκτέλεση σύμβασης), αλλά ενημερώνουμε τον
+          χρήστη ότι η χρήση συνιστά αποδοχή. */}
+      <p className="mt-3 text-xs text-slate-500 text-center leading-relaxed">
+        Πατώντας «Αναζήτηση», αποδέχεσαι την{" "}
+        <Link
+          href="/privacy"
+          className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+        >
+          Πολιτική Απορρήτου
+        </Link>{" "}
+        και τους{" "}
+        <Link
+          href="/terms"
+          className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+        >
+          Όρους Χρήσης
+        </Link>
+        .
+      </p>
     </form>
   );
 }
