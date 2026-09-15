@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
   // Φάση 12r: Το splash παίζει ΜΟΝΟ την πρώτη φορά που ο χρήστης
@@ -256,19 +257,19 @@ function MainScreen() {
         <div className="flex items-center justify-center gap-2 flex-wrap">
           <span>SMAct</span>
           <span className="text-slate-700">·</span>
-          <a
+          <Link
             href="/privacy"
             className="hover:text-cyan-400 transition-colors underline underline-offset-2"
           >
             Πολιτική Απορρήτου
-          </a>
+          </Link>
           <span className="text-slate-700">·</span>
-          <a
+          <Link
             href="/terms"
             className="hover:text-cyan-400 transition-colors underline underline-offset-2"
           >
             Όροι Χρήσης
-          </a>
+          </Link>
           <span className="text-slate-700">·</span>
           <span className="text-slate-600">
             Ελάχιστα δεδομένα, καμία διαφήμιση

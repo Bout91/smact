@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import Script from "next/script";
 import CollapsibleInfoBox from "../components/CollapsibleInfoBox";
 
@@ -410,7 +411,7 @@ export default function DownloadPage() {
                       <span className="text-xs text-slate-400 leading-relaxed select-none">
                         Αποδέχομαι ότι το σχόλιό μου θα διαβαστεί από τον
                         Διαχειριστή, σύμφωνα με την{" "}
-                        <a
+                        <Link
                           href="/privacy"
                           target="_blank"
                           rel="noopener noreferrer"
@@ -418,7 +419,7 @@ export default function DownloadPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           Πολιτική Απορρήτου
-                        </a>
+                        </Link>
                         .
                       </span>
                     </label>
@@ -441,19 +442,19 @@ export default function DownloadPage() {
         <div className="flex items-center justify-center gap-2 flex-wrap">
           <span>SMAct</span>
           <span className="text-slate-700">·</span>
-          <a
+          <Link
             href="/privacy"
             className="hover:text-cyan-400 transition-colors underline underline-offset-2"
           >
             Πολιτική Απορρήτου
-          </a>
+          </Link>
           <span className="text-slate-700">·</span>
-          <a
+          <Link
             href="/terms"
             className="hover:text-cyan-400 transition-colors underline underline-offset-2"
           >
             Όροι Χρήσης
-          </a>
+          </Link>
           <span className="text-slate-700">·</span>
           <span className="text-slate-600">
             Ελάχιστα δεδομένα, καμία διαφήμιση
